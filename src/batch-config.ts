@@ -7,7 +7,8 @@
 import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
 
 const BATCH_SENDER_ADDRESSES: Partial<Record<number, `0x${string}`>> = {
-  [ARC_TESTNET_ID]: undefined, // TODO: fill in after the testnet deploy
+  // Deployed 2026-09-19, tx 0x9488285214f987956b15ecff80fca955b2b00116fd6734d7b9807506f4d48246
+  [ARC_TESTNET_ID]: '0xF2DCe7fe2864FDD899b12185c610C11d425200d9',
   [ARC_MAINNET_ID]: undefined, // TODO: fill in after the mainnet deploy
 };
 

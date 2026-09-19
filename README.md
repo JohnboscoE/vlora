@@ -25,7 +25,7 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 | Payment request links | ✅ | ✅ |
 | Pay and register `.arc` names ([ArcNames](https://github.com/JohnboscoE/ArcNames)) | ✅ | after ArcNames mainnet deploy |
 | Swaps USDC ⇄ EURC ⇄ cirBTC via Synthra | ✅ | off until Synthra publishes mainnet pools |
-| Batch payments (many recipients, one tx) | after `BatchSender` deploy | after `BatchSender` deploy |
+| Batch payments (many recipients, one tx) | ✅ | after `BatchSender` mainnet deploy |
 | Voice input (speech to text) | ✅ | ✅ |
 | Agent wallet (AI sub-account, no per-tx signing) | ✅ beta — local and on Vercel | v2 |
 
@@ -114,7 +114,7 @@ Deployed on Arc Testnet:
 | Contract | Address |
 |---|---|
 | `AgentVaultFactory` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
-| `BatchSender` | not deployed yet |
+| `BatchSender` | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` |
 
 | Contract | What it guarantees |
 |---|---|

@@ -36,10 +36,10 @@ const TODAY = [
   'Send USDC to any address, contact or .arc name',
   'Claim your own .arc name and get paid at it',
   'Payment request links',
+  'Batch payments: many recipients, one transaction',
   'Every transaction simulated and confirmed before you sign',
 ];
 const NEXT = [
-  'Batch payments: many recipients, one transaction',
   'Token swaps',
   'Adding liquidity',
   'Agent wallet: an AI sub-account that pays within limits you set (in testing on testnet)',
