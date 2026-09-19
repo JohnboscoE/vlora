@@ -27,7 +27,7 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 | Swaps USDC ⇄ EURC ⇄ cirBTC via Synthra | ✅ | off until Synthra publishes mainnet pools |
 | Batch payments (many recipients, one tx) | ✅ | ✅ |
 | Voice input (speech to text) | ✅ | ✅ |
-| Agent wallet (AI sub-account, no per-tx signing) | ✅ beta — local and on Vercel | v2 |
+| Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only (no swaps yet) |
 
 ## What it does
 
@@ -115,7 +115,7 @@ Deployed contracts (the same deployer made its first transactions on each chain,
 |---|---|---|
 | `BatchSender` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` |
 | `ArcNames` (fixed, 0.01 USDC/yr) | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` | `0x578dbd5734f13bca66a1355cca296c07823892a2` (original, 5 USDC/yr) |
-| `AgentVaultFactory` | — (v2) | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
+| `AgentVaultFactory` | `0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
 
 | Contract | What it guarantees |
 |---|---|
@@ -167,7 +167,7 @@ The agent uses Claude Haiku 4.5, the cheapest current model — roughly $3 per 1
 
 The network is chosen at build time by `VITE_ARC_NETWORK`: set it to `mainnet` in Vercel's environment variables for the production site; leave it unset locally to develop on Arc Testnet. Every chain id, RPC (with fallbacks), explorer, contract address and landing-page feature list follows from it.
 
-Live on mainnet: USDC sends, balances, contacts, payment links, voice input, batch payments and `.arc` names. Still off on mainnet: swaps and EURC/cirBTC (add verified token addresses to `src/tokens.ts` and a venue to `src/swap-config.ts` once pools exist) and the agent wallet (v2).
+Live on mainnet: USDC sends, balances, contacts, payment links, voice input, batch payments and `.arc` names. Still off on mainnet: swaps and EURC/cirBTC (add verified token addresses to `src/tokens.ts` and a venue to `src/swap-config.ts` once pools exist) while the agent wallet on mainnet can send USDC but not swap. The agent server follows the same `VITE_ARC_NETWORK` variable, so it always runs on the network the site shows.
 
 ## Troubleshooting
 

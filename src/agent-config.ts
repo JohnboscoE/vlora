@@ -1,12 +1,15 @@
 /**
  * Agent wallets (contracts/AgentVault.sol). A chain with no factory address has
- * the agent turned off. Testnet prototype only.
+ * the agent turned off. Beta on both networks (mainnet: USDC sends only).
  */
-import { ARC_TESTNET_ID } from './chain-env';
+import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
 
 const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
   // Deployed 2026-09-18, tx 0x1043edf12537df51982d55f36587b6fff2ac15b5a26af897db4210be22c148fb
   [ARC_TESTNET_ID]: '0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9',
+  // Deployed 2026-09-19, tx 0x208b3eda8526269395cd4dc61dc15d55ad34d281aad818068a52d640c096b906
+  // (Synthra mainnet router; swaps stay off until mainnet pools exist)
+  [ARC_MAINNET_ID]: '0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69',
 };
 
 export function getAgentFactory(chainId: number): `0x${string}` | undefined {
