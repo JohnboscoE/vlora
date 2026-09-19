@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+console.jsonl
+contracts/out/
+contracts/cache/
+files.zip
+!.env.example
+!server/.env.example
+broadcast/**/dry-run/
