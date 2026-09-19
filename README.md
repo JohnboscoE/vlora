@@ -29,6 +29,7 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 ## What it does
 
 - **Plain-language commands** — send, swap, batch, check balances, request money, manage names. Type `/` for a quick-action menu.
+- **Voice input** — tap the mic and say *"send 5 USDC to james dot arc"*. Speech becomes text in the input (browser Web Speech API: Chrome, Edge, Safari); nothing is sent until you review it and press Enter.
 - **Check before you sign** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
 - **Swaps** — best quote across Synthra fee tiers, refreshed every 20s, with a 0.5% slippage guard and a re-quote just before signing.

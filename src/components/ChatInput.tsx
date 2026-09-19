@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Paperclip, type LucideIcon } from 'lucide-react';
+import { ArrowUp, Mic, Paperclip, Square, type LucideIcon } from 'lucide-react';
+import { useSpeechToText } from '@/hooks/useSpeechToText';
+import { normalizeSpokenCommand } from '@/lib/speechNormalize';
 import { cn } from '@/lib/utils';
 
 export interface SlashCommand {
@@ -31,6 +33,26 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
   const [active, setActive] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
 
+  // Speech-to-text: fills the box as you speak; you still review and press Enter
+  const dictationBase = useRef('');
+  const speech = useSpeechToText((transcript, isFinal) => {
+    const spoken = isFinal ? normalizeSpokenCommand(transcript) : transcript;
+    const base = dictationBase.current;
+    onChange(base ? `${base} ${spoken}` : spoken);
+  });
+  const toggleMic = () => {
+    if (speech.listening) {
+      speech.stop();
+      return;
+    }
+    dictationBase.current = value.trim();
+    speech.start();
+  };
+  // Stop listening once the user sends
+  useEffect(() => {
+    if (disabled && speech.listening) speech.stop();
+  }, [disabled, speech]);
+
   // "/" at the start opens the menu; the text after it filters by name
   const slashQuery = /^\/\S*$/.test(value) ? value.slice(1).toLowerCase() : null;
   const matches = slashQuery == null ? [] : commands.filter((c) => c.id.startsWith(slashQuery) || c.label.toLowerCase().includes(slashQuery));
@@ -60,6 +82,7 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
   const handleSubmit = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
+    if (speech.listening) speech.stop();
     onSubmit(trimmed);
     onChange('');
   };
@@ -176,13 +199,34 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
             e.target.value = ''; // allow picking the same file again
           }}
         />
+        <button
+          type="button"
+          onClick={toggleMic}
+          disabled={disabled || !speech.supported}
+          aria-label={speech.listening ? 'Stop dictation' : 'Speak a command'}
+          aria-pressed={speech.listening}
+          title={
+            !speech.supported
+              ? 'Voice input isn\'t supported in this browser (try Chrome, Edge or Safari)'
+              : speech.listening
+                ? 'Listening… tap to stop'
+                : 'Tap and speak. Your browser converts speech to text (Chrome/Edge send audio to their servers); nothing is sent until you press Enter.'
+          }
+          className={cn(
+            'relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors disabled:opacity-40',
+            speech.listening ? 'bg-danger/10 text-danger' : 'text-muted hover:bg-surface-2 hover:text-ink',
+          )}
+        >
+          {speech.listening && <span className="absolute inset-0 animate-ping rounded-xl bg-danger/20" aria-hidden="true" />}
+          {speech.listening ? <Square className="relative size-3.5 fill-current" /> : <Mic className="size-4" />}
+        </button>
         <textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={placeholder ?? 'Type a command, or / for quick actions'}
+          placeholder={speech.listening ? 'Listening… speak your command' : (placeholder ?? 'Type a command, or / for quick actions')}
           rows={1}
           aria-label="Command"
           aria-expanded={menuOpen}
@@ -197,6 +241,19 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
           <ArrowUp className="size-4" strokeWidth={2.5} />
         </button>
       </div>
+      {speech.error && (
+        <p className="mt-1.5 flex items-center justify-between gap-2 px-1 text-xs text-danger" role="alert">
+          {speech.error}
+          <button type="button" onClick={speech.clearError} className="text-subtle hover:text-ink" aria-label="Dismiss">
+            ✕
+          </button>
+        </p>
+      )}
+      {speech.listening && (
+        <p className="mt-1.5 px-1 text-xs text-muted" aria-live="polite">
+          Listening… say something like "send 5 USDC to james dot arc". Review the text, then press Enter.
+        </p>
+      )}
     </div>
   );
 }
