@@ -37,12 +37,15 @@ const TODAY = [
   'Claim your own .arc name and get paid at it',
   'Payment request links',
   'Batch payments: many recipients, one transaction',
+  'Swap USDC, EURC and cirBTC at live quotes',
+  'Speak your command instead of typing it',
+  'Agent wallet (testnet beta): the AI pays within limits you set',
   'Every transaction simulated and confirmed before you sign',
 ];
 const NEXT = [
-  'Token swaps',
+  'Mainnet launch',
+  'Agent wallets on mainnet, with a separate signing key per user',
   'Adding liquidity',
-  'Agent wallet: an AI sub-account that pays within limits you set (in testing on testnet)',
   'A directory of Arc apps you can use from chat',
 ];
 
