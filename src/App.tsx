@@ -16,7 +16,8 @@ import { IntentPreview } from './components/IntentPreview';
 import { BalanceCard } from './components/BalanceBar';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut } from 'lucide-react';
+import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
 import { buildPaymentLink, clearPaymentRequest, readPaymentRequest } from './lib/paymentLink';
@@ -153,6 +154,8 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
   { id: 'register', label: 'Register a .arc name', hint: 'Get paid at yourname.arc · 5 USDC/yr', icon: AtSign, action: 'insert', template: 'Register |.arc for 1 year' },
+  { id: 'agent', label: 'Agent mode', hint: 'Let your agent wallet act without asking you to sign', icon: Bot, action: 'submit', template: '/agent' },
+  { id: 'exit', label: 'Exit agent mode', hint: 'Back to normal: you sign every transaction', icon: LogOut, action: 'submit', template: '/exit' },
   { id: 'help', label: 'Help', hint: 'Everything Vlora can do', icon: HelpCircle, action: 'submit', template: 'help' },
 ];
 
@@ -192,6 +195,16 @@ export default function App() {
     setAgentVault(v);
     if (!v?.active) setAgentMode(false);
   }, []);
+  const agentModeRef = useRef(agentMode);
+  useEffect(() => {
+    if (agentModeRef.current && !agentMode && agentVault && !agentVault.active) {
+      setMessages((prev) => [
+        ...prev,
+        agentMsg('Agent mode turned off because your agent wallet was paused, revoked or expired.', 'info'),
+      ]);
+    }
+    agentModeRef.current = agentMode;
+  }, [agentMode, agentVault]);
   const { signMessageAsync } = useSignMessage();
   const [draft, setDraft] = useState('');
   const queryClient = useQueryClient();
@@ -745,8 +758,59 @@ export default function App() {
     }
   }
 
+  // /agent and /exit switch modes; they are handled here, never sent to the agent
+  function handleModeCommand(command: string): boolean {
+    const cmd = command.trim().toLowerCase();
+    const enter = cmd === '/agent';
+    const exit = ['/exit', '/cancel', '/normal', '/cancel agent', '/exit agent'].includes(cmd);
+    if (!enter && !exit) return false;
+
+    addMessage(userMsg(command.trim()));
+    if (exit) {
+      if (!agentMode) {
+        addMessage(agentMsg('You\'re already in normal mode — every transaction asks your wallet to sign.', 'info'));
+      } else {
+        setAgentMode(false);
+        addMessage(agentMsg('Back to normal mode. Every transaction will ask your wallet to sign again.', 'success'));
+      }
+      return true;
+    }
+
+    // Entering agent mode: explain exactly what's missing if it can't start
+    if (!getAgentFactory(ACTIVE_CHAIN_ID)) {
+      addMessage(agentMsg(`Agent wallets aren't available on ${ACTIVE_CHAIN.name}.`, 'info'));
+    } else if (!isConnected) {
+      addMessage(agentMsg('Connect your wallet first — the agent wallet belongs to it.', 'info'));
+    } else if (!agentVault) {
+      addMessage(
+        agentMsg(
+          'You don\'t have an agent wallet yet. Create one in the Agent wallet panel (set your limits), add a few USDC to it, then type /agent again.',
+          'info',
+        ),
+      );
+    } else if (!agentVault.active) {
+      addMessage(
+        agentMsg('Your agent wallet is paused, expired or revoked. Resume or extend it in the Agent wallet panel, then type /agent again.', 'info'),
+      );
+    } else if (agentMode) {
+      addMessage(agentMsg('Agent mode is already on. Type /exit to go back to normal mode.', 'info'));
+    } else {
+      setAgentMode(true);
+      addMessage(
+        agentMsg(
+          'Agent mode on. I\'ll act from your agent wallet without asking you to sign — only within its limits.\n' +
+            'Try: "what\'s in my agent wallet?", "send 1 USDC to 0x…" or "swap 2 USDC for EURC".\n' +
+            'Type /exit to go back to normal mode.',
+          'success',
+        ),
+      );
+    }
+    return true;
+  }
+
   async function handleUserMessage(text: string) {
     if (thinkingRef.current) return;
+    if (handleModeCommand(text)) return;
     if (agentMode && agentVault?.active) return handleAgentMessage(text);
     addMessage(userMsg(text));
 
