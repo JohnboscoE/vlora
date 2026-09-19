@@ -56,7 +56,8 @@ contracts/
   BatchSender.sol        multi-recipient ERC-20 payouts (no owner, never holds funds)
   AgentVault.sol         agent wallet + factory
   test/                  Foundry tests
-server/                  agent API (testnet beta)
+server/                  agent API source (testnet beta) — handler shared by local + Vercel
+api/agent/               Vercel Functions wrapping server/handler.ts
 ```
 
 ## Run it locally
@@ -104,17 +105,28 @@ How a request is handled (`server/agent.ts`):
 3. Before anything executes, the server re-checks deterministically: recipients must be an address or `.arc` name **you typed** (so text the AI reads can't redirect funds), amounts must fit the per-tx and daily limits, and the transaction must pass a dry run. At most 5 actions per message.
 4. The vault contract enforces the limits again on-chain. Worst case — a compromised agent key or a manipulated model — is one day's allowance per token.
 
-Setup:
+The agent needs three secrets:
+
+| Variable | What it is |
+|---|---|
+| `ANTHROPIC_API_KEY` | Your Anthropic API key |
+| `AGENT_PRIVATE_KEY` | The agent's own key — `cast wallet new` (not your wallet). Fund its address with a little test USDC for gas. |
+| `SESSION_SECRET` | 32+ random characters that sign sign-in sessions: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+
+**Locally:** put them in `server/.env` (copy `server/.env.example`; the file is git-ignored), then
 
 ```bash
-cast wallet new                      # the agent's own key (not your wallet); fund it with a little test USDC for gas
-cp server/.env.example server/.env   # add ANTHROPIC_API_KEY and AGENT_PRIVATE_KEY — this file is git-ignored
-npm run agent                        # http://localhost:8787, proxied by Vite at /api/agent
+npm run agent    # http://localhost:8787 — Vite proxies /api/agent here
+npm run dev
 ```
+
+**On Vercel:** add the same three under *Project → Settings → Environment Variables* and redeploy. The agent runs as Vercel Functions in `api/agent/` (the chat function may run up to 120 s). Those functions call `api/_lib/agent-handler.mjs`, a bundle of `server/*.ts` that `npm run build` regenerates — run `npm run build:agent-api` after editing `server/`.
+
+Sign-in sessions are stateless HMAC-signed tokens, so they work across serverless instances. Per-wallet rate limits are best-effort on Vercel (per instance); the vault's on-chain limits are the real safety net.
 
 Then in the app: create an agent wallet with limits → add funds → flip the **Agent** switch in the chat header.
 
-The agent uses Claude Opus 5 at medium effort, with Anthropic's server-side refusal fallback enabled; cost is roughly $11–18 per 1,000 messages.
+The agent uses Claude Haiku 4.5, the cheapest current model — roughly $3 per 1,000 messages. It only maps requests onto four tools; the safety-critical checks are deterministic code and on-chain limits.
 
 ## Going to mainnet
 

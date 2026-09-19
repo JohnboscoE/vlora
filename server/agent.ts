@@ -17,9 +17,11 @@ import {
   tokenBySymbol,
   vaultAbi,
   type Token,
-} from './chain.ts';
+} from './chain';
 
-const MODEL = 'claude-opus-5';
+// Cheapest current model: the agent only maps a request onto a few tools, and the
+// safety-critical checks are deterministic code + on-chain limits, not the model.
+const MODEL = 'claude-haiku-4-5';
 const MAX_ACTIONS_PER_MESSAGE = 5;
 const erc20BalanceAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
@@ -242,10 +244,6 @@ export async function runAgent(opts: {
     model: MODEL,
     max_tokens: 16000,
     system: SYSTEM,
-    output_config: { effort: 'medium' },
-    // Server-side refusal fallback: a declined request is retried on a fallback model
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
     max_iterations: 10,
     tools: [getVaultStatus, resolveName, sendToken, swapTokens],
     messages: [...history, { role: 'user', content: opts.message }],

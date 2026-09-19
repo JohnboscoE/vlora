@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build-agent-api.mjs && vite build",
     "preview": "vite preview",
     "deploy:self": "bun run ./scripts/self-deploy.ts",
     "compass:deploy": "bun run ./scripts/compass-deploy.ts",
@@ -15,7 +15,8 @@
     "check": "bash scripts/check.sh",
     "contracts:build": "forge build",
     "contracts:test": "forge test",
-    "agent": "node --experimental-strip-types --no-warnings server/index.ts"
+    "agent": "tsx server/local.ts",
+    "build:agent-api": "node scripts/build-agent-api.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
@@ -54,6 +55,7 @@
     "oxlint-tsgolint": "^7.0.2001",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.13",
     "typescript": "~7.0.2",
     "vite": "^6.0.5",
     "vite-plugin-node-polyfills": "^0.22.0"

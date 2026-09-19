@@ -155,7 +155,8 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
         {header}
         {agentAddress === null && (
           <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
-            The agent server isn't running. Start it with <span className="mono">npm run agent</span>.
+            The agent server isn't reachable. Locally, start it with <span className="mono">npm run agent</span>; on Vercel, set
+            its environment variables (see README).
           </p>
         )}
         <div className="mt-4 grid grid-cols-2 gap-2">
