@@ -8,12 +8,18 @@ import { mainnet } from 'wagmi/chains'
 import { defineChain } from 'viem'
 import { injected } from 'wagmi/connectors'
 import { registerChain } from './tracing'
-import { ACTIVE_CHAIN, ARC_TESTNET_ID } from './chain-env'
+import { ACTIVE_CHAIN, ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env'
 
 // Extra public endpoints for the same chain. If one host is slow or blocked
 // (ad blockers, VPNs, corporate filters), reads fall through to the next.
 const EXTRA_RPC_URLS: Record<number, string[]> = {
   [ARC_TESTNET_ID]: ['https://rpc.testnet.arc.network'],
+  // Verified: all return chain id 5042
+  [ARC_MAINNET_ID]: [
+    'https://rpc.blockdaemon.mainnet.arc.io',
+    'https://rpc.drpc.mainnet.arc.io',
+    'https://rpc.quicknode.mainnet.arc.io',
+  ],
 }
 
 // Build the active Arc chain (testnet or mainnet, per chain-env.ts) from the

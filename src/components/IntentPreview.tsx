@@ -22,6 +22,7 @@ import { useSwapQuote, type QuoteState, type SwapQuote } from '@/lib/swapQuote';
 import type { TokenBalances } from '@/hooks/useTokenBalances';
 import { getSwapVenue } from '@/swap-config';
 import { formatTokenAmount } from '@/tokens';
+import { formatUsdcFee, useArcNameFee } from '@/lib/arcNameFee';
 import type { SwapCheck } from '../utils/validateSend';
 import { TokenUSDC } from '@web3icons/react';
 import { ACTIVE_CHAIN, ACTIVE_CHAIN_ID } from '@/chain-env';
@@ -75,13 +76,14 @@ export function IntentPreview({
   const busy = isPending || isConfirming;
   // Either check gates the button the same way; a batch just has more to verify
   const swapsLive = getSwapVenue(ACTIVE_CHAIN_ID) != null;
+  const arcNameFee = useArcNameFee();
   const sendCheck =
     intent.type === 'send'
       ? validateSend(intent, balances)
       : intent.type === 'batch'
         ? validateBatch(intent, balances.USDC)
         : intent.type === 'arcname'
-          ? validateArcName(intent)
+          ? validateArcName(intent, arcNameFee)
           : intent.type === 'swap' && swapsLive
             ? validateSwap(intent, balances)
             : null;
@@ -193,7 +195,7 @@ export function IntentPreview({
             {intent.type === 'batch' ? (
               <BatchRows intent={intent} contacts={contacts} arcLabels={arcLabels} onEdit={onEditIntent} editable={!busy} sim={sim} />
             ) : intent.type === 'arcname' ? (
-              <ArcNameRows intent={intent} account={account} onEdit={onEditIntent} editable={!busy} sim={sim} />
+              <ArcNameRows intent={intent} account={account} onEdit={onEditIntent} editable={!busy} sim={sim} yearlyFee={arcNameFee} />
             ) : (
               intent.type === 'swap' && swapCheck ? (
                 <SwapRows intent={intent} check={swapCheck} quote={quote} sim={sim} />
@@ -267,7 +269,7 @@ export function IntentPreview({
               ) : intent.type === 'arcname' ? (
                 intent.op === 'primary'
                   ? `Set ${intent.label}.arc as my name`
-                  : `${intent.op === 'register' ? 'Register' : 'Renew'} ${intent.label}.arc · ${intent.years * 5} USDC`
+                  : `${intent.op === 'register' ? 'Register' : 'Renew'} ${intent.label}.arc${arcNameFee != null ? ` · ${formatUsdcFee(arcNameFee * BigInt(intent.years))}` : ''}`
               ) : (
                 'Execute'
               )}
@@ -584,12 +586,14 @@ function ArcNameRows({
   onEdit,
   editable,
   sim,
+  yearlyFee,
 }: {
   intent: ArcNameIntent;
   account?: `0x${string}`;
   onEdit: (next: ArcNameIntent) => void;
   editable: boolean;
   sim: TxPreview;
+  yearlyFee?: bigint;
 }) {
   const paid = intent.op === 'register' || intent.op === 'renew';
   const title = intent.op === 'register' ? 'Register name' : intent.op === 'renew' ? 'Renew name' : 'Set primary name';
@@ -626,7 +630,7 @@ function ArcNameRows({
       {paid && (
         <Row label="Name fee">
           <TokenUSDC size={16} variant="branded" />
-          {intent.years * 5} USDC
+          {yearlyFee != null ? formatUsdcFee(yearlyFee * BigInt(intent.years)) : <Loader2 className="size-3.5 animate-spin text-muted" />}
         </Row>
       )}
       <Row label="Network">{ACTIVE_CHAIN.name}</Row>

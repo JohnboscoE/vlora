@@ -33,6 +33,7 @@ import {
 import { resolveArcName, resolveArcNamesInText, useMyArcName } from './lib/arcNames';
 import { arcNamesAbi, getArcNamesAddress } from './arcnames-config';
 import { ClaimNameCard } from './components/ClaimNameCard';
+import { fetchArcNameFee, formatUsdcFee, useArcNameFee } from './lib/arcNameFee';
 import { getUsdc, buildTxExplorerUrl } from '@/onchain-facts';
 import { Amount, parseAmount, usdcDecimalsFor } from '@/onchain-money';
 import {
@@ -153,7 +154,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
-  { id: 'register', label: 'Register a .arc name', hint: 'Get paid at yourname.arc · 5 USDC/yr', icon: AtSign, action: 'insert', template: 'Register |.arc for 1 year' },
+  { id: 'register', label: 'Register a .arc name', hint: 'Get paid at yourname.arc instead of a 0x address', icon: AtSign, action: 'insert', template: 'Register |.arc for 1 year' },
   { id: 'agent', label: 'Agent mode', hint: 'Let your agent wallet act without asking you to sign', icon: Bot, action: 'submit', template: '/agent' },
   { id: 'exit', label: 'Exit agent mode', hint: 'Back to normal: you sign every transaction', icon: LogOut, action: 'submit', template: '/exit' },
   { id: 'help', label: 'Help', hint: 'Everything Vlora can do', icon: HelpCircle, action: 'submit', template: 'help' },
@@ -217,6 +218,7 @@ export default function App() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
+  const arcNameFee = useArcNameFee();
   const myArcName = useMyArcName(isConnected ? address : undefined, nameRefresh);
   const showClaimName = ARC_NAMES_LIVE && isConnected && !wrongChain && !myArcName;
   const usdcFact = getUsdc(ACTIVE_CHAIN_ID);
@@ -453,7 +455,8 @@ export default function App() {
         chainId: ACTIVE_CHAIN_ID,
       });
       if (available) {
-        return agentMsg(`${label}.arc is available. Claim it with "register ${label}.arc" — 5 USDC per year.`, 'info');
+        const fee = await fetchArcNameFee();
+        return agentMsg(`${label}.arc is available. Claim it with "register ${label}.arc"${fee != null ? ` — ${formatUsdcFee(fee)} per year` : ''}.`, 'info');
       }
       const until = new Date(Number(expiry) * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
       return agentMsg(`${label}.arc → ${owner}\nRegistered until ${until}. You can pay it with "send 10 USDC to ${label}.arc".`, 'success');
@@ -469,7 +472,7 @@ export default function App() {
     const usdc = usdcFact.address as `0x${string}`;
     const name = `${intent.label}.arc`;
     const paid = intent.op === 'register' || intent.op === 'renew';
-    const feeLabel = `${intent.years * 5} USDC`;
+    const feeLabel = formatUsdcFee(check.feeRaw);
 
     let needsApproval = false;
     if (paid) {
@@ -850,7 +853,7 @@ export default function App() {
       }
 
       if (intent.type === 'arcname') {
-        const check = validateArcName(intent);
+        const check = validateArcName(intent, await fetchArcNameFee());
         if (!check.ok) {
           await reply(agentMsg(check.reason, 'error'));
           return;
@@ -1025,7 +1028,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
       if (!(await namesStillMatch(check.recipients))) return;
       void executeBatch(check);
     } else if (pendingIntent.type === 'arcname') {
-      const check = validateArcName(pendingIntent);
+      const check = validateArcName(pendingIntent, arcNameFee);
       if (!check.ok) {
         toast.error(check.reason);
         return;

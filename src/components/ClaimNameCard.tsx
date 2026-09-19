@@ -6,6 +6,7 @@ import { ACTIVE_CHAIN_ID } from '@/chain-env';
 import { ARC_NAME_LABEL_RE, ARC_NAME_MAX_YEARS, arcNamesAbi, getArcNamesAddress } from '@/arcnames-config';
 import { normalizeArcLabel } from '@/lib/arcNames';
 import { cn } from '@/lib/utils';
+import { formatUsdcFee, useArcNameFee } from '@/lib/arcNameFee';
 
 type Availability = 'idle' | 'invalid' | 'checking' | 'available' | 'taken' | 'error';
 
@@ -23,6 +24,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
   const [years, setYears] = useState(1);
   const [status, setStatus] = useState<Availability>('idle');
   const label = normalizeArcLabel(input);
+  const yearlyFee = useArcNameFee();
 
   // Debounced on-chain availability check
   useEffect(() => {
@@ -75,7 +77,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <AtSign className="size-4 text-brand" /> Claim your .arc name
           </h2>
-          <p className="mt-1 text-xs leading-relaxed text-muted">Get paid at a name instead of a 0x address. 5 USDC / year.</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">Get paid at a name instead of a 0x address.{yearlyFee != null ? ` ${formatUsdcFee(yearlyFee)} / year.` : ''}</p>
         </div>
         {collapsible && (
           <button onClick={() => setOpen(false)} aria-label="Hide" className="text-subtle hover:text-ink">
@@ -139,7 +141,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
           >
             {Array.from({ length: ARC_NAME_MAX_YEARS }, (_, i) => i + 1).map((y) => (
               <option key={y} value={y}>
-                {y} yr{y === 1 ? '' : 's'} · {y * 5} USDC
+                {y} yr{y === 1 ? '' : 's'}{yearlyFee != null ? ` · ${formatUsdcFee(yearlyFee * BigInt(y))}` : ''}
               </option>
             ))}
           </select>

@@ -15,8 +15,6 @@ export function getArcNamesAddress(chainId: number): `0x${string}` | undefined {
   return ARC_NAMES_ADDRESSES[chainId];
 }
 
-/** 5 USDC per year (6 decimals), matching ArcNames.YEARLY_FEE */
-export const ARC_NAME_YEARLY_FEE = 5_000_000n;
 export const ARC_NAME_MAX_YEARS = 10;
 /** Measured in ArcNames tests (~290k), padded; used only before the approval exists */
 export const ARC_NAME_REGISTER_GAS = 320_000n;
@@ -25,6 +23,7 @@ export const ARC_NAME_REGISTER_GAS = 320_000n;
 export const ARC_NAME_LABEL_RE = /^[a-z0-9-]{3,32}$/;
 
 export const arcNamesAbi = [
+  { type: 'function', name: 'YEARLY_FEE', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'resolve', stateMutability: 'view', inputs: [{ name: 'name', type: 'string' }], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'reverseLookup', stateMutability: 'view', inputs: [{ name: 'wallet', type: 'address' }], outputs: [{ type: 'string' }] },
   { type: 'function', name: 'isAvailable', stateMutability: 'view', inputs: [{ name: 'name', type: 'string' }], outputs: [{ type: 'bool' }] },

@@ -5,6 +5,12 @@ import { ACTIVE_CHAIN } from '@/chain-env';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoMark } from '@/components/Logo';
+import { ACTIVE_CHAIN_ID } from '@/chain-env';
+import { getTokens } from '@/tokens';
+import { getSwapVenue } from '@/swap-config';
+import { getBatchSenderAddress } from '@/batch-config';
+import { getArcNamesAddress } from '@/arcnames-config';
+import { getAgentFactory } from '@/agent-config';
 
 const APP_HREF = '#/app';
 
@@ -32,19 +38,28 @@ const ARC_POINTS = [
   { icon: Gauge, title: 'Cents per transfer', body: 'Fees around a cent make small, everyday payments worth doing on-chain.' },
 ];
 
+// What's live depends on the network this build targets (VITE_ARC_NETWORK)
+const tokenSymbols = getTokens(ACTIVE_CHAIN_ID).map((t) => t.symbol);
+const namesLive = getArcNamesAddress(ACTIVE_CHAIN_ID) != null;
+const batchLive = getBatchSenderAddress(ACTIVE_CHAIN_ID) != null;
+const swapsLive = getSwapVenue(ACTIVE_CHAIN_ID) != null;
+const agentLive = getAgentFactory(ACTIVE_CHAIN_ID) != null;
+
 const TODAY = [
-  'Send USDC to any address, contact or .arc name',
-  'Claim your own .arc name and get paid at it',
+  `Send ${tokenSymbols.join(', ')} to any address${namesLive ? ', contact or .arc name' : ' or contact'}`,
+  ...(namesLive ? ['Claim your own .arc name and get paid at it'] : []),
   'Payment request links',
-  'Batch payments: many recipients, one transaction',
-  'Swap USDC, EURC and cirBTC at live quotes',
+  ...(batchLive ? ['Batch payments: many recipients, one transaction'] : []),
+  ...(swapsLive ? [`Swap ${tokenSymbols.join(', ')} at live quotes`] : []),
   'Speak your command instead of typing it',
-  'Agent wallet (testnet beta): the AI pays within limits you set',
+  ...(agentLive ? ['Agent wallet (beta): the AI pays within limits you set'] : []),
   'Every transaction simulated and confirmed before you sign',
 ];
 const NEXT = [
-  'Mainnet launch',
-  'Agent wallets on mainnet, with a separate signing key per user',
+  ...(!namesLive ? ['.arc names on this network'] : []),
+  ...(!batchLive ? ['Batch payments'] : []),
+  ...(!swapsLive ? ['Swaps between USDC, EURC and more'] : []),
+  ...(!agentLive ? ['Agent wallet: an AI sub-account with its own signing key per user'] : []),
   'Adding liquidity',
   'A directory of Arc apps you can use from chat',
 ];

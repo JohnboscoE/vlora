@@ -5,11 +5,11 @@ import type { ArcNameIntent, BatchIntent, SendIntent, SwapIntent } from './inten
 import { getToken, getTokens, type TokenInfo } from '@/tokens';
 import { getSwapVenue, isSupportedPair, type SwapVenue } from '@/swap-config';
 import type { TokenBalances } from '@/hooks/useTokenBalances';
-import { ARC_NAME_LABEL_RE, ARC_NAME_MAX_YEARS, ARC_NAME_YEARLY_FEE, getArcNamesAddress } from '@/arcnames-config';
+import { ARC_NAME_LABEL_RE, ARC_NAME_MAX_YEARS, getArcNamesAddress } from '@/arcnames-config';
 import { getBatchSenderAddress, MAX_BATCH_RECIPIENTS } from '@/batch-config';
 
 const BALANCE_UNKNOWN =
-  "Couldn't read your USDC balance from Arc, so I can't check this payment yet. If you use an ad or privacy blocker or a VPN, allow rpc.testnet.arc.io / rpc.testnet.arc.network, then try again.";
+  "Couldn't read your USDC balance from Arc, so I can't check this payment yet. If you use an ad or privacy blocker or a VPN, allow *.arc.io and *.arc.network for this site, then try again.";
 
 function balanceUnknown(symbol: string) {
   return BALANCE_UNKNOWN.replace('USDC', symbol);
@@ -145,7 +145,8 @@ export type ArcNameCheck =
   | { ok: false; reason: string };
 
 // Local rules for .arc actions; availability/ownership are checked on-chain in the preview
-export function validateArcName(intent: ArcNameIntent): ArcNameCheck {
+/** yearlyFee: read from the contract (useArcNameFee); undefined = unknown → paid actions blocked */
+export function validateArcName(intent: ArcNameIntent, yearlyFee?: bigint): ArcNameCheck {
   const contract = getArcNamesAddress(ACTIVE_CHAIN_ID);
   if (!contract) return { ok: false, reason: `.arc names aren't available on ${ACTIVE_CHAIN.name} yet.` };
   if (!ARC_NAME_LABEL_RE.test(intent.label)) {
@@ -155,5 +156,8 @@ export function validateArcName(intent: ArcNameIntent): ArcNameCheck {
   if (paid && (!Number.isInteger(intent.years) || intent.years < 1 || intent.years > ARC_NAME_MAX_YEARS)) {
     return { ok: false, reason: `Choose between 1 and ${ARC_NAME_MAX_YEARS} years.` };
   }
-  return { ok: true, contract, feeRaw: paid ? ARC_NAME_YEARLY_FEE * BigInt(intent.years) : 0n };
+  if (paid && yearlyFee == null) {
+    return { ok: false, reason: `Couldn't read the .arc name fee from ${ACTIVE_CHAIN.name} yet. Try again in a moment.` };
+  }
+  return { ok: true, contract, feeRaw: paid ? yearlyFee! * BigInt(intent.years) : 0n };
 }
