@@ -1,6 +1,7 @@
 // Agent API as a plain Web Request → Response handler, shared by the Vercel
 // functions in /api/agent and the local dev server (server/local.ts).
-import { getAddress, isAddress, type Address } from 'viem';
+import Anthropic from '@anthropic-ai/sdk';
+import { BaseError, getAddress, isAddress, type Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { issueNonce, login, sessionAddress } from './auth';
 import { runAgent, type ChatTurn } from './agent';
@@ -131,8 +132,27 @@ async function handleChat(config: Config, request: Request): Promise<Response> {
     return json(200, result);
   } catch (err) {
     console.error('[agent] run failed', err);
-    return json(500, { error: 'The agent hit an error. Nothing further was executed.' });
+    return json(500, { error: `The agent hit an error (${describeError(err)}). Nothing further was executed.` });
   } finally {
     busy.delete(owner);
   }
+}
+
+/**
+ * A short, secret-free description of why the agent failed, so problems are
+ * diagnosable from the chat without server log access. SDK error messages
+ * don't contain API keys.
+ */
+function describeError(err: unknown): string {
+  if (err instanceof Anthropic.AuthenticationError) return 'AI provider rejected ANTHROPIC_API_KEY (401) — check the key';
+  if (err instanceof Anthropic.PermissionDeniedError) return 'AI provider: this API key lacks access (403)';
+  if (err instanceof Anthropic.NotFoundError) return 'AI provider: model not found (404)';
+  if (err instanceof Anthropic.RateLimitError) return 'AI provider rate limit or no credit (429) — check your Anthropic plan/credits';
+  if (err instanceof Anthropic.BadRequestError) return `AI provider rejected the request (400): ${err.message.slice(0, 160)}`;
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return 'AI provider timed out';
+  if (err instanceof Anthropic.APIConnectionError) return 'could not reach the AI provider';
+  if (err instanceof Anthropic.APIError) return `AI provider error ${err.status ?? ''}`.trim();
+  if (err instanceof BaseError) return `blockchain RPC: ${err.shortMessage.slice(0, 160)}`;
+  if (err instanceof Error) return `${err.name}: ${err.message.slice(0, 160)}`;
+  return 'unknown error';
 }
