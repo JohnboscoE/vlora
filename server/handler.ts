@@ -16,13 +16,22 @@ interface Config {
 }
 
 // Read lazily so a missing variable returns a clear 503 instead of crashing the function
+// Tolerate common paste mistakes in dashboard env vars: whitespace, newlines, wrapping quotes
+function env(name: string): string {
+  return (process.env[name] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+}
+
 function getConfig(): Config | string {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
-  const agentKey = process.env.AGENT_PRIVATE_KEY ?? '';
-  const sessionSecret = process.env.SESSION_SECRET ?? '';
+  const anthropicKey = env('ANTHROPIC_API_KEY');
+  let agentKey = env('AGENT_PRIVATE_KEY');
+  if (/^[0-9a-fA-F]{64}$/.test(agentKey)) agentKey = `0x${agentKey}`; // accept a key without 0x
+  const sessionSecret = env('SESSION_SECRET');
+  // Messages name the variable only — never its value
   if (!anthropicKey) return 'ANTHROPIC_API_KEY is not set';
-  if (!/^0x[0-9a-fA-F]{64}$/.test(agentKey)) return 'AGENT_PRIVATE_KEY is missing or not 0x + 64 hex';
-  if (sessionSecret.length < 32) return 'SESSION_SECRET is missing or shorter than 32 characters';
+  if (!agentKey) return 'AGENT_PRIVATE_KEY is not set';
+  if (!/^0x[0-9a-fA-F]{64}$/.test(agentKey)) return 'AGENT_PRIVATE_KEY is not a valid private key (expected 0x + 64 hex characters)';
+  if (!sessionSecret) return 'SESSION_SECRET is not set';
+  if (sessionSecret.length < 32) return 'SESSION_SECRET is too short (use 32+ characters)';
   return {
     anthropicKey,
     agentKey: agentKey as `0x${string}`,
@@ -50,7 +59,7 @@ export async function handleAgent(route: AgentRoute, request: Request): Promise<
   const config = getConfig();
   if (typeof config === 'string') {
     console.error(`[agent] misconfigured: ${config}`);
-    return json(503, { error: 'The agent server is not configured yet.' });
+    return json(503, { error: `The agent server is not configured yet: ${config}.` });
   }
 
   try {

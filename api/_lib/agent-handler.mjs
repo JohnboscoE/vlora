@@ -359,13 +359,19 @@ async function runAgent(opts) {
 }
 
 // server/handler.ts
+function env(name) {
+  return (process.env[name] ?? "").trim().replace(/^["']|["']$/g, "").trim();
+}
 function getConfig() {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
-  const agentKey = process.env.AGENT_PRIVATE_KEY ?? "";
-  const sessionSecret = process.env.SESSION_SECRET ?? "";
+  const anthropicKey = env("ANTHROPIC_API_KEY");
+  let agentKey = env("AGENT_PRIVATE_KEY");
+  if (/^[0-9a-fA-F]{64}$/.test(agentKey)) agentKey = `0x${agentKey}`;
+  const sessionSecret = env("SESSION_SECRET");
   if (!anthropicKey) return "ANTHROPIC_API_KEY is not set";
-  if (!/^0x[0-9a-fA-F]{64}$/.test(agentKey)) return "AGENT_PRIVATE_KEY is missing or not 0x + 64 hex";
-  if (sessionSecret.length < 32) return "SESSION_SECRET is missing or shorter than 32 characters";
+  if (!agentKey) return "AGENT_PRIVATE_KEY is not set";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(agentKey)) return "AGENT_PRIVATE_KEY is not a valid private key (expected 0x + 64 hex characters)";
+  if (!sessionSecret) return "SESSION_SECRET is not set";
+  if (sessionSecret.length < 32) return "SESSION_SECRET is too short (use 32+ characters)";
   return {
     anthropicKey,
     agentKey,
@@ -387,7 +393,7 @@ async function handleAgent(route, request) {
   const config = getConfig();
   if (typeof config === "string") {
     console.error(`[agent] misconfigured: ${config}`);
-    return json(503, { error: "The agent server is not configured yet." });
+    return json(503, { error: `The agent server is not configured yet: ${config}.` });
   }
   try {
     if (route === "info" && request.method === "GET") {

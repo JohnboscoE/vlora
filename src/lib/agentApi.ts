@@ -21,11 +21,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-/** The agent server's signing address, needed to create a vault. Null if the server is offline. */
+/** The agent server's signing address, needed to create a vault. Null if the server is unreachable. */
 export async function getAgentInfo(): Promise<{ agent: `0x${string}` } | null> {
   try {
     return await call<{ agent: `0x${string}` }>('/info');
-  } catch {
+  } catch (err) {
+    console.error('[vlora] agent server unreachable:', err instanceof Error ? err.message : err);
     return null;
   }
 }
