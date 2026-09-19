@@ -62,6 +62,15 @@ Rules:
 - Amounts are in whole token units (e.g. "10" means 10 USDC).
 - Reply briefly in plain language: what you did, with amounts, or what you need.`;
 
+/**
+ * Minimum output after slippage. Kept as a function on purpose: Vercel's file
+ * tracer (@vercel/nft) statically evaluates inline BigInt maths and crashes the
+ * deploy ("Cannot mix BigInt and other types") when it guesses an operand wrong.
+ */
+function applySlippage(amount: bigint, bps: bigint): bigint {
+  return (amount * (10_000n - bps)) / 10_000n;
+}
+
 /** Everything in this module that touches money goes through here */
 export async function runAgent(opts: {
   apiKey: string;
@@ -225,7 +234,7 @@ export async function runAgent(opts: {
         }
       }
       if (!best || best.out === 0n) return `ERROR: no ${SWAP.venue} pool can fill ${amount_in} ${tokenIn.symbol} right now`;
-      const minOut = (best.out * (10_000n - SWAP.slippageBps)) / 10_000n;
+      const minOut = applySlippage(best.out, SWAP.slippageBps);
       const outLabel = `${formatUnits(best.out, tokenOut.decimals)} ${tokenOut.symbol}`;
       return execute('swap', `Swapped ${amount_in} ${tokenIn.symbol} for ~${outLabel}`, {
         address: opts.vault,

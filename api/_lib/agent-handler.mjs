@@ -193,6 +193,9 @@ Rules:
 - If a tool reports an error (limit reached, insufficient balance\u2026), explain it plainly and don't retry with a different amount unless asked.
 - Amounts are in whole token units (e.g. "10" means 10 USDC).
 - Reply briefly in plain language: what you did, with amounts, or what you need.`;
+function applySlippage(amount, bps) {
+  return amount * (10000n - bps) / 10000n;
+}
 async function runAgent(opts) {
   const client = new Anthropic({ apiKey: opts.apiKey });
   const { account, wallet } = agentClients(opts.agentKey);
@@ -329,7 +332,7 @@ async function runAgent(opts) {
         }
       }
       if (!best || best.out === 0n) return `ERROR: no ${SWAP.venue} pool can fill ${amount_in} ${tokenIn.symbol} right now`;
-      const minOut = best.out * (10000n - SWAP.slippageBps) / 10000n;
+      const minOut = applySlippage(best.out, SWAP.slippageBps);
       const outLabel = `${formatUnits(best.out, tokenOut.decimals)} ${tokenOut.symbol}`;
       return execute("swap", `Swapped ${amount_in} ${tokenIn.symbol} for ~${outLabel}`, {
         address: opts.vault,
