@@ -260,6 +260,24 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
         </p>
       )}
 
+      {agentAddress === null && (
+        <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+          The agent server isn't reachable, so the agent can't act and Extend / Re-enable are unavailable. Locally, run{' '}
+          <span className="mono">npm run agent</span>; on Vercel, deploy the agent functions and set their environment variables (see README).
+        </p>
+      )}
+      {agentAddress && currentAgent && !revoked && currentAgent.toLowerCase() !== agentAddress.toLowerCase() && (
+        <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+          This wallet trusts a different agent key than the server is using. Click <strong>Extend {DEFAULT_EXPIRY_DAYS}d</strong> to point it at
+          the server's current agent.
+        </p>
+      )}
+      {revoked && agentAddress && (
+        <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
+          The agent is revoked — it can't act. Click <strong>Re-enable</strong> to trust the server's agent again for {DEFAULT_EXPIRY_DAYS} days.
+        </p>
+      )}
+
       {/* Fund */}
       <div className="mt-4 flex gap-2">
         <input
@@ -314,16 +332,17 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
             {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />} {paused ? 'Resume' : 'Pause'}
           </button>
         )}
-        {agentAddress && (
+        {(
           <button
-            disabled={busy != null}
+            disabled={busy != null || !agentAddress}
+            title={agentAddress ? undefined : 'The agent server is not reachable, so its address is unknown'}
             onClick={() =>
-              void run('Extend agent access', () =>
+              void run(revoked ? 'Re-enable agent' : 'Extend agent access', () =>
                 writeContractAsync({
                   address: vault,
                   abi: agentVaultAbi,
                   functionName: 'setAgent',
-                  args: [agentAddress, BigInt(Math.floor(Date.now() / 1000) + DEFAULT_EXPIRY_DAYS * DAY)],
+                  args: [agentAddress!, BigInt(Math.floor(Date.now() / 1000) + DEFAULT_EXPIRY_DAYS * DAY)],
                   chainId: ACTIVE_CHAIN_ID,
                 }),
               )
