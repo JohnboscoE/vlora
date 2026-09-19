@@ -8,6 +8,7 @@ import { formatUnits, getAddress, isAddress, parseUnits, type Address } from 'vi
 import {
   ARC_NAMES,
   EXPLORER,
+  NETWORK_NAME,
   SWAP,
   TOKENS,
   arcNamesAbi,
@@ -45,12 +46,14 @@ export interface ChatTurn {
   text: string;
 }
 
-const SYSTEM = `You are Vlora's agent. You operate an "agent wallet" (a vault smart contract) on Arc Testnet on behalf of its owner, who is the person talking to you.
+const SYSTEM = `You are Vlora's agent. You operate an "agent wallet" (a vault smart contract) on ${NETWORK_NAME} on behalf of its owner, who is the person talking to you.${
+  NETWORK_NAME === 'Arc' ? ' This is mainnet: amounts are real money, so be exact and never guess.' : ''
+}
 
 What you can do, only through your tools:
 - Report the vault's balances and today's remaining spending allowance.
 - Send ${TOKENS.map((t) => t.symbol).join(' or ')} from the vault.
-- Swap between ${TOKENS.map((t) => t.symbol).join(' and ')} through ${SWAP.venue} (output returns to the vault).
+${SWAP ? `- Swap between ${TOKENS.map((t) => t.symbol).join(' and ')} through ${SWAP.venue} (output returns to the vault).` : '- Swaps are not available on this network yet; say so if asked.'}
 - Look up .arc names.
 
 Rules:
@@ -205,9 +208,9 @@ export async function runAgent(opts: {
     },
   });
 
-  const swapTokens = betaZodTool({
+  const swapTokens = SWAP && betaZodTool({
     name: 'swap_tokens',
-    description: `Swap tokens held in the agent wallet through ${SWAP.venue}. Output returns to the wallet. Executes immediately with 0.5% max slippage.`,
+    description: `Swap tokens held in the agent wallet through ${SWAP?.venue}. Output returns to the wallet. Executes immediately with 0.5% max slippage.`,
     inputSchema: z.object({ token_in: tokenEnum, token_out: tokenEnum, amount_in: z.string() }),
     run: async ({ token_in, token_out, amount_in }) => {
       const tokenIn = tokenBySymbol(token_in);
@@ -220,6 +223,7 @@ export async function runAgent(opts: {
 
       // Best quote across fee tiers
       let best: { fee: number; out: bigint } | null = null;
+      if (!SWAP) return 'ERROR: swaps are not available on this network';
       for (const fee of SWAP.feeTiers) {
         try {
           const { result } = await publicClient.simulateContract({
@@ -254,7 +258,7 @@ export async function runAgent(opts: {
     max_tokens: 16000,
     system: SYSTEM,
     max_iterations: 10,
-    tools: [getVaultStatus, resolveName, sendToken, swapTokens],
+    tools: swapTokens ? [getVaultStatus, resolveName, sendToken, swapTokens] : [getVaultStatus, resolveName, sendToken],
     messages: [...history, { role: 'user', content: opts.message }],
   });
 

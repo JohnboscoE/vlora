@@ -133,7 +133,9 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
           <Bot className="size-4 text-brand" /> Agent wallet
-          <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">Testnet beta</span>
+          <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
+            {ACTIVE_CHAIN.isTestnet ? 'Testnet beta' : 'Beta'}
+          </span>
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           A sub-account the AI can spend from without asking you each time — only within the limits you set here, enforced on-chain.
@@ -390,7 +392,8 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
         </p>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-subtle">
-        Only the balance you add here is at risk, and at most the daily limit per token. Runs on {ACTIVE_CHAIN.name}.
+        Only the balance you add here is at risk, and at most the daily limit per token. Runs on {ACTIVE_CHAIN.name}
+        {ACTIVE_CHAIN.isTestnet ? '.' : ' — real funds: start with small limits.'}
       </p>
     </section>
   );

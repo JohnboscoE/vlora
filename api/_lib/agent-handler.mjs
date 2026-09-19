@@ -69,36 +69,69 @@ import { formatUnits, getAddress as getAddress2, isAddress as isAddress2, parseU
 // server/chain.ts
 import { createPublicClient, createWalletClient, defineChain, fallback, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-var CHAIN_ID = 5042002;
-var EXPLORER = "https://explorer.testnet.arc.io";
-var arcTestnet = defineChain({
-  id: CHAIN_ID,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.testnet.arc.io", "https://rpc.testnet.arc.network"] } }
-});
-var TOKENS = [
-  { symbol: "USDC", address: "0x3600000000000000000000000000000000000000", decimals: 6 },
-  { symbol: "EURC", address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", decimals: 6 }
-];
+var IS_MAINNET = (process.env.VITE_ARC_NETWORK ?? "").trim() === "mainnet";
+var USDC = { symbol: "USDC", address: "0x3600000000000000000000000000000000000000", decimals: 6 };
+var NETWORKS = {
+  testnet: {
+    chainId: 5042002,
+    name: "Arc Testnet",
+    explorer: "https://explorer.testnet.arc.io",
+    rpcs: ["https://rpc.testnet.arc.io", "https://rpc.testnet.arc.network"],
+    // Same registry as src/tokens.ts
+    tokens: [USDC, { symbol: "EURC", address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", decimals: 6 }],
+    // Synthra — verified: router factory() matches, USDC/EURC pools funded
+    swap: {
+      venue: "Synthra",
+      router: "0xA545bCB1Bd7985c59ea162aB1748A0803434C31b",
+      quoter: "0x3Ce954107b1A675826B33bF23060Dd655e3758fE",
+      feeTiers: [100, 500, 3e3, 1e4],
+      slippageBps: 50n
+    },
+    arcNames: "0x578dbd5734f13bca66a1355cca296c07823892a2"
+  },
+  mainnet: {
+    chainId: 5042,
+    name: "Arc",
+    explorer: "https://explorer.arc.io",
+    rpcs: [
+      "https://rpc.mainnet.arc.io",
+      "https://rpc.blockdaemon.mainnet.arc.io",
+      "https://rpc.drpc.mainnet.arc.io",
+      "https://rpc.quicknode.mainnet.arc.io"
+    ],
+    tokens: [USDC],
+    // No verified USDC/EURC pools on mainnet yet — the swap tool is off
+    swap: null,
+    arcNames: "0xF2DCe7fe2864FDD899b12185c610C11d425200d9"
+  }
+};
+var NET = IS_MAINNET ? NETWORKS.mainnet : NETWORKS.testnet;
+var CHAIN_ID = NET.chainId;
+var NETWORK_NAME = NET.name;
+var EXPLORER = NET.explorer;
+var TOKENS = NET.tokens;
+var SWAP = NET.swap;
+var ARC_NAMES = NET.arcNames;
 function tokenBySymbol(symbol) {
   return TOKENS.find((t) => t.symbol === symbol.toUpperCase());
 }
-var SWAP = {
-  venue: "Synthra",
-  router: "0xA545bCB1Bd7985c59ea162aB1748A0803434C31b",
-  quoter: "0x3Ce954107b1A675826B33bF23060Dd655e3758fE",
-  feeTiers: [100, 500, 3e3, 1e4],
-  slippageBps: 50n
-};
-var ARC_NAMES = "0x578dbd5734f13bca66a1355cca296c07823892a2";
+var arcChain = defineChain({
+  id: CHAIN_ID,
+  name: NETWORK_NAME,
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: [...NET.rpcs] } }
+});
 var publicClient = createPublicClient({
-  chain: arcTestnet,
-  transport: fallback(arcTestnet.rpcUrls.default.http.map((u) => http(u, { retryCount: 2, timeout: 15e3 })))
+  chain: arcChain,
+  transport: fallback(arcChain.rpcUrls.default.http.map((u) => http(u, { retryCount: 2, timeout: 15e3 })))
 });
 function agentClients(privateKey) {
   const account = privateKeyToAccount(privateKey);
-  const wallet = createWalletClient({ account, chain: arcTestnet, transport: http(arcTestnet.rpcUrls.default.http[0]) });
+  const wallet = createWalletClient({
+    account,
+    chain: arcChain,
+    transport: fallback(arcChain.rpcUrls.default.http.map((u) => http(u, { retryCount: 1, timeout: 2e4 })))
+  });
   return { account, wallet };
 }
 var vaultAbi = [
@@ -178,12 +211,12 @@ var MAX_ACTIONS_PER_MESSAGE = 5;
 var erc20BalanceAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }
 ];
-var SYSTEM = `You are Vlora's agent. You operate an "agent wallet" (a vault smart contract) on Arc Testnet on behalf of its owner, who is the person talking to you.
+var SYSTEM = `You are Vlora's agent. You operate an "agent wallet" (a vault smart contract) on ${NETWORK_NAME} on behalf of its owner, who is the person talking to you.${NETWORK_NAME === "Arc" ? " This is mainnet: amounts are real money, so be exact and never guess." : ""}
 
 What you can do, only through your tools:
 - Report the vault's balances and today's remaining spending allowance.
 - Send ${TOKENS.map((t) => t.symbol).join(" or ")} from the vault.
-- Swap between ${TOKENS.map((t) => t.symbol).join(" and ")} through ${SWAP.venue} (output returns to the vault).
+${SWAP ? `- Swap between ${TOKENS.map((t) => t.symbol).join(" and ")} through ${SWAP.venue} (output returns to the vault).` : "- Swaps are not available on this network yet; say so if asked."}
 - Look up .arc names.
 
 Rules:
@@ -307,9 +340,9 @@ async function runAgent(opts) {
       });
     }
   });
-  const swapTokens = betaZodTool({
+  const swapTokens = SWAP && betaZodTool({
     name: "swap_tokens",
-    description: `Swap tokens held in the agent wallet through ${SWAP.venue}. Output returns to the wallet. Executes immediately with 0.5% max slippage.`,
+    description: `Swap tokens held in the agent wallet through ${SWAP?.venue}. Output returns to the wallet. Executes immediately with 0.5% max slippage.`,
     inputSchema: z.object({ token_in: tokenEnum, token_out: tokenEnum, amount_in: z.string() }),
     run: async ({ token_in, token_out, amount_in }) => {
       const tokenIn = tokenBySymbol(token_in);
@@ -320,6 +353,7 @@ async function runAgent(opts) {
       const limitProblem = await checkLimits(tokenIn, value);
       if (limitProblem) return `ERROR: ${limitProblem}`;
       let best = null;
+      if (!SWAP) return "ERROR: swaps are not available on this network";
       for (const fee of SWAP.feeTiers) {
         try {
           const { result } = await publicClient.simulateContract({
@@ -349,7 +383,7 @@ async function runAgent(opts) {
     max_tokens: 16e3,
     system: SYSTEM,
     max_iterations: 10,
-    tools: [getVaultStatus, resolveName, sendToken, swapTokens],
+    tools: swapTokens ? [getVaultStatus, resolveName, sendToken, swapTokens] : [getVaultStatus, resolveName, sendToken],
     messages: [...history, { role: "user", content: opts.message }]
   });
   if (final.stop_reason === "refusal") {
@@ -398,7 +432,7 @@ async function handleAgent(route, request) {
   }
   try {
     if (route === "info" && request.method === "GET") {
-      return json(200, { agent: config.agentAddress, chainId: 5042002 });
+      return json(200, { agent: config.agentAddress, chainId: CHAIN_ID });
     }
     if (route === "nonce" && request.method === "GET") {
       const address = new URL(request.url).searchParams.get("address") ?? "";

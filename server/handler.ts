@@ -5,7 +5,7 @@ import { BaseError, getAddress, isAddress, type Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { issueNonce, login, sessionAddress } from './auth';
 import { runAgent, type ChatTurn } from './agent';
-import { publicClient, vaultAbi } from './chain';
+import { CHAIN_ID, publicClient, vaultAbi } from './chain';
 
 export type AgentRoute = 'info' | 'nonce' | 'login' | 'chat';
 
@@ -65,7 +65,7 @@ export async function handleAgent(route: AgentRoute, request: Request): Promise<
 
   try {
     if (route === 'info' && request.method === 'GET') {
-      return json(200, { agent: config.agentAddress, chainId: 5042002 });
+      return json(200, { agent: config.agentAddress, chainId: CHAIN_ID });
     }
 
     if (route === 'nonce' && request.method === 'GET') {

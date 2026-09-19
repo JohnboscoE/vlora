@@ -1,17 +1,9 @@
 // Local agent server for development: `npm run agent`.
 // On Vercel the same handler runs as functions in /api/agent — this file isn't used there.
+import './loadEnv'; // must stay first: sets env before chain.ts picks the network
 import { createServer, type IncomingMessage } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
 import { handleAgent, type AgentRoute } from './handler';
-
-// Minimal .env loader (no extra dependency). Real env vars take precedence.
-const envPath = new URL('./.env', import.meta.url);
-if (existsSync(envPath)) {
-  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && process.env[m[1]!] === undefined) process.env[m[1]!] = m[2]!.replace(/^["']|["']$/g, '');
-  }
-}
+import { CHAIN_ID, NETWORK_NAME } from './chain';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ROUTES = new Set<AgentRoute>(['info', 'nonce', 'login', 'chat']);
@@ -34,5 +26,5 @@ createServer(async (req, res) => {
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
 }).listen(PORT, () => {
-  console.log(`Vlora agent server on http://localhost:${PORT} (the Vite dev server proxies /api/agent here)`);
+  console.log(`Vlora agent server on http://localhost:${PORT} — ${NETWORK_NAME} (chain ${CHAIN_ID}); the Vite dev server proxies /api/agent here`);
 });
