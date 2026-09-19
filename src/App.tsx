@@ -180,7 +180,11 @@ function useIsDesktop() {
 }
 
 const WELCOME: ChatMessageData = agentMsg(
-  'Hello! I can send USDC and check your USDC balance on Arc. Swap and liquidity commands are preview-only for now — they show what would happen but don\'t execute yet.',
+  `Hello! On ${ACTIVE_CHAIN.name} I can send ${getTokens(ACTIVE_CHAIN_ID)
+    .map((t) => t.symbol)
+    .join(', ')}, pay several people at once, check your balance and handle .arc names.${
+    SWAPS_LIVE ? ' I can also swap between those tokens at a live quote.' : ' Swaps aren\'t available on this network yet.'
+  } Every action is checked and shown for confirmation before your wallet signs.`,
   'info',
 );
 
@@ -1118,7 +1122,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
       <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-1 gap-6 px-3 py-3 md:px-6 md:py-6">
         {/* Sidebar (desktop) */}
         {isDesktop && (
-          <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto">
+          <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto pb-1 [&>*]:shrink-0">
             <BalanceCard arcName={myArcName} />
 
             {showClaimName && (
