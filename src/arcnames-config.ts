@@ -8,7 +8,9 @@ import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
 const ARC_NAMES_ADDRESSES: Partial<Record<number, `0x${string}`>> = {
   // Live testnet registry. Replace with the fixed contract once it's redeployed.
   [ARC_TESTNET_ID]: '0x578dbd5734f13bca66a1355cca296c07823892a2',
-  [ARC_MAINNET_ID]: undefined, // TODO: deploy the fixed ArcNames to mainnet
+  // Fixed ArcNames (0.01 USDC/yr, fees to 0x6765…b27f). Deployed 2026-09-19,
+  // tx 0x8658090cbbf63c2f107aa671b5caca925d04dce773f1f448730d69f72f841987
+  [ARC_MAINNET_ID]: '0xF2DCe7fe2864FDD899b12185c610C11d425200d9',
 };
 
 export function getArcNamesAddress(chainId: number): `0x${string}` | undefined {

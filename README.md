@@ -23,9 +23,9 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 | Balances | ✅ | ✅ |
 | Contacts, saved batches, CSV import | ✅ | ✅ |
 | Payment request links | ✅ | ✅ |
-| Pay and register `.arc` names ([ArcNames](https://github.com/JohnboscoE/ArcNames)) | ✅ | after ArcNames mainnet deploy |
+| Pay and register `.arc` names ([ArcNames](https://github.com/JohnboscoE/ArcNames)) — 0.01 USDC/year on mainnet | ✅ | ✅ |
 | Swaps USDC ⇄ EURC ⇄ cirBTC via Synthra | ✅ | off until Synthra publishes mainnet pools |
-| Batch payments (many recipients, one tx) | ✅ | after `BatchSender` mainnet deploy |
+| Batch payments (many recipients, one tx) | ✅ | ✅ |
 | Voice input (speech to text) | ✅ | ✅ |
 | Agent wallet (AI sub-account, no per-tx signing) | ✅ beta — local and on Vercel | v2 |
 
@@ -109,12 +109,13 @@ forge script contracts/script/DeployAgentVaultFactory.s.sol --rpc-url arc_testne
 
 Run these from the project root, then paste the printed addresses into `src/batch-config.ts` and `src/agent-config.ts`. Features whose address is missing stay switched off in the UI. The deployer wallet needs a little test USDC for gas (about 0.11 USDC for the factory).
 
-Deployed on Arc Testnet:
+Deployed contracts (the same deployer made its first transactions on each chain, so addresses repeat across networks with **different** contracts — always check the chain):
 
-| Contract | Address |
-|---|---|
-| `AgentVaultFactory` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
-| `BatchSender` | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` |
+| Contract | Arc mainnet (5042) | Arc Testnet (5042002) |
+|---|---|---|
+| `BatchSender` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` |
+| `ArcNames` (fixed, 0.01 USDC/yr) | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` | `0x578dbd5734f13bca66a1355cca296c07823892a2` (original, 5 USDC/yr) |
+| `AgentVaultFactory` | — (v2) | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
 
 | Contract | What it guarantees |
 |---|---|
@@ -162,14 +163,11 @@ In the panel you can **Pause/Resume**, **Extend 7d** (also re-points the vault a
 
 The agent uses Claude Haiku 4.5, the cheapest current model — roughly $3 per 1,000 messages. It only maps requests onto four tools; the safety-critical checks are deterministic code and on-chain limits.
 
-## Going to mainnet
+## Mainnet
 
-1. Deploy `BatchSender` (and the fixed ArcNames) to Arc mainnet with `--rpc-url arc`, and add the addresses to `src/batch-config.ts` / `src/arcnames-config.ts`.
-2. Add mainnet token addresses to `src/tokens.ts` and a swap venue to `src/swap-config.ts` once pools exist.
-3. Set `IS_MAINNET = true` in `src/chain-env.ts` — every chain id, RPC, explorer and USDC address derives from it.
-4. Do a small real send and balance check before announcing.
+The network is chosen at build time by `VITE_ARC_NETWORK`: set it to `mainnet` in Vercel's environment variables for the production site; leave it unset locally to develop on Arc Testnet. Every chain id, RPC (with fallbacks), explorer, contract address and landing-page feature list follows from it.
 
-The agent wallet stays testnet-only until v2.
+Live on mainnet: USDC sends, balances, contacts, payment links, voice input, batch payments and `.arc` names. Still off on mainnet: swaps and EURC/cirBTC (add verified token addresses to `src/tokens.ts` and a venue to `src/swap-config.ts` once pools exist) and the agent wallet (v2).
 
 ## Troubleshooting
 

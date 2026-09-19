@@ -9,7 +9,8 @@ import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
 const BATCH_SENDER_ADDRESSES: Partial<Record<number, `0x${string}`>> = {
   // Deployed 2026-09-19, tx 0x9488285214f987956b15ecff80fca955b2b00116fd6734d7b9807506f4d48246
   [ARC_TESTNET_ID]: '0xF2DCe7fe2864FDD899b12185c610C11d425200d9',
-  [ARC_MAINNET_ID]: undefined, // TODO: fill in after the mainnet deploy
+  // Deployed 2026-09-19, tx 0x61131dd02f7f5f5341844932cfe66b7cdc4ea458e363aafd359cd38f3e5171f7
+  [ARC_MAINNET_ID]: '0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9',
 };
 
 export function getBatchSenderAddress(chainId: number): `0x${string}` | undefined {
