@@ -40,6 +40,9 @@ export default defineConfig({
     // Agent API (server/index.ts) — only needed when using agent wallets
     proxy: {
       '/api/agent': 'http://localhost:8787',
+      // Same-origin RPC (mirrors the rewrites in vercel.json): ad blockers block *.arc.io
+      '/rpc/mainnet': { target: 'https://rpc.mainnet.arc.io', changeOrigin: true, rewrite: () => '/' },
+      '/rpc/testnet': { target: 'https://rpc.testnet.arc.io', changeOrigin: true, rewrite: () => '/' },
     },
   },
 })

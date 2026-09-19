@@ -45,12 +45,17 @@ const arc = defineChain({
 // Pre-register chain RPC URLs so trace events show correct chain names immediately
 registerChain(arc.id, arc.rpcUrls.default.http[0])
 
+// Proxied through this site's own domain (vercel.json rewrites / Vite dev proxy).
+// Many ad blockers block every *.arc.io host — on mainnet that is every public RPC —
+// but they don't block the app's own origin. Direct hosts remain as fallbacks.
+const SAME_ORIGIN_RPC = `${window.location.origin}/rpc/${ACTIVE_CHAIN.isTestnet ? 'testnet' : 'mainnet'}`
+
 export const config = createConfig({
   chains: [arc, mainnet], // mainnet needed for ENS resolution
   connectors: [injected()],
   transports: {
     [arc.id]: fallback(
-      [...ACTIVE_CHAIN.rpcUrls, ...(EXTRA_RPC_URLS[ACTIVE_CHAIN.chainId] ?? [])].map((url) =>
+      [SAME_ORIGIN_RPC, ...ACTIVE_CHAIN.rpcUrls, ...(EXTRA_RPC_URLS[ACTIVE_CHAIN.chainId] ?? [])].map((url) =>
         http(url, { retryCount: 2, timeout: 12_000 }),
       ),
     ),
