@@ -11,8 +11,8 @@ import {
   DEFAULT_PER_DAY,
   DEFAULT_PER_TX,
   getAgentFactory,
+  getAgentTokens,
 } from '@/agent-config';
-import { getTokens } from '@/tokens';
 import { getAgentInfo } from '@/lib/agentApi';
 import { watchTx } from '@/lib/watchTx';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ const DAY = 24 * 60 * 60;
 export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelProps) {
   const { address } = useAccount();
   const factory = getAgentFactory(ACTIVE_CHAIN_ID);
-  const tokens = getTokens(ACTIVE_CHAIN_ID);
+  const tokens = getAgentTokens(ACTIVE_CHAIN_ID);
   const { writeContractAsync } = useWriteContract();
   const [open, setOpen] = useState(!collapsible);
   const [agentAddress, setAgentAddress] = useState<`0x${string}` | null | undefined>(undefined);

@@ -1,12 +1,13 @@
-// Bundles the agent server (server/*.ts) into one ESM file for the Vercel
-// functions in api/agent/*.js. Vercel can't compile the TS sources itself because
+// Bundles the server (server/*.ts) into ESM files for the Vercel functions:
+// api/_lib/agent-handler.mjs (api/agent/*.js) and gasless-handler.mjs (api/gasless/*.js). Vercel can't compile the TS sources itself because
 // this project uses TypeScript 7, which has no JS compiler API.
 // Runs automatically in `npm run build`; run `npm run build:agent-api` after editing server/.
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['server/handler.ts'],
-  outfile: 'api/_lib/agent-handler.mjs',
+  entryPoints: { 'agent-handler': 'server/handler.ts', 'gasless-handler': 'server/gasless.ts' },
+  outdir: 'api/_lib',
+  outExtension: { '.js': '.mjs' },
   bundle: true,
   platform: 'node',
   format: 'esm',

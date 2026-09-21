@@ -3,7 +3,7 @@
  * onchain-facts registry; everything else is listed here explicitly.
  */
 import { getUsdc } from './onchain-facts';
-import { ARC_TESTNET_ID } from './chain-env';
+import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
 
 export type TokenSymbol = 'USDC' | 'EURC' | 'cirBTC';
 
@@ -20,7 +20,12 @@ const EXTRA_TOKENS: Partial<Record<number, TokenInfo[]>> = {
     // Verified: the only cirBTC with Synthra liquidity (USDC and EURC pools). Beware same-named copies.
     { symbol: 'cirBTC', name: 'Circle BTC', address: '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF', decimals: 8 },
   ],
-  // Arc mainnet: add EURC here once its address is published
+  [ARC_MAINNET_ID]: [
+    // From docs.arc.io/arc/references/contract-addresses; symbol and decimals checked on-chain
+    { symbol: 'EURC', name: 'Euro Coin', address: '0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1', decimals: 6 },
+    // Circle's cirBTC as listed by LI.FI (symbol "cirBTC", 8 decimals, checked on-chain)
+    { symbol: 'cirBTC', name: 'Circle BTC', address: '0x171A4217b86A807A64eB94757Db6849fb4bDbAA0', decimals: 8 },
+  ],
 };
 
 export function getTokens(chainId: number): TokenInfo[] {

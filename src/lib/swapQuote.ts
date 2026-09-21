@@ -3,12 +3,15 @@ import { getPublicClient } from 'wagmi/actions';
 import { config } from '@/config';
 import { ACTIVE_CHAIN_ID } from '@/chain-env';
 import { getSwapVenue, quoterV2Abi, SWAP_SLIPPAGE_BPS } from '@/swap-config';
+import { getLifiQuote, type LifiRoute } from '@/lib/lifi';
 
 export interface SwapQuote {
   amountIn: bigint;
   amountOut: bigint;
-  /** Pool fee tier in hundredths of a bip (3000 = 0.3%) */
+  /** Pool fee tier in hundredths of a bip (3000 = 0.3%); 0 for an aggregator route */
   fee: number;
+  /** Aggregator (LI.FI) quotes: the verified transaction to sign */
+  lifi?: LifiRoute;
   /** amountOut minus the slippage allowance — the swap reverts below this */
   minOut: bigint;
   quotedAt: number;
@@ -19,13 +22,29 @@ export function applySlippage(amountOut: bigint): bigint {
 }
 
 /**
- * Asks QuoterV2 for every fee tier and keeps the best output. Tiers without a
- * pool or liquidity revert and are skipped. Returns null if nothing can fill it.
+ * Synthra: asks QuoterV2 for every fee tier and keeps the best output. Tiers
+ * without a pool or liquidity revert and are skipped.
+ * LI.FI: one verified aggregator quote for this wallet.
+ * Returns null if nothing can fill it.
  */
-export async function getBestQuote(tokenIn: `0x${string}`, tokenOut: `0x${string}`, amountIn: bigint): Promise<SwapQuote | null> {
+export async function getBestQuote(
+  tokenIn: `0x${string}`,
+  tokenOut: `0x${string}`,
+  amountIn: bigint,
+  account?: `0x${string}`,
+): Promise<SwapQuote | null> {
   const venue = getSwapVenue(ACTIVE_CHAIN_ID);
+  if (!venue || amountIn <= 0n) return null;
+
+  if (venue.kind === 'lifi') {
+    // LI.FI builds the transaction for a specific wallet
+    if (!account) return null;
+    const q = await getLifiQuote(venue, tokenIn, tokenOut, amountIn, account);
+    return q ? { amountIn, amountOut: q.amountOut, fee: 0, minOut: q.minOut, lifi: q.route, quotedAt: Date.now() } : null;
+  }
+
   const client = getPublicClient(config, { chainId: ACTIVE_CHAIN_ID });
-  if (!venue || !client || amountIn <= 0n) return null;
+  if (!client) return null;
 
   const results = await Promise.all(
     venue.feeTiers.map(async (fee) => {
@@ -61,9 +80,9 @@ export type QuoteState =
 const REFRESH_MS = 20_000;
 
 /** Live quote that refreshes every 20s while the preview is open */
-export function useSwapQuote(tokenIn?: `0x${string}`, tokenOut?: `0x${string}`, amountIn?: bigint): QuoteState {
+export function useSwapQuote(tokenIn?: `0x${string}`, tokenOut?: `0x${string}`, amountIn?: bigint, account?: `0x${string}`): QuoteState {
   const [state, setState] = useState<QuoteState>({ status: 'idle' });
-  const key = tokenIn && tokenOut && amountIn != null ? `${tokenIn}-${tokenOut}-${amountIn}` : null;
+  const key = tokenIn && tokenOut && amountIn != null ? `${tokenIn}-${tokenOut}-${amountIn}-${account ?? ''}` : null;
 
   useEffect(() => {
     if (!tokenIn || !tokenOut || amountIn == null || amountIn <= 0n) {
@@ -74,7 +93,7 @@ export function useSwapQuote(tokenIn?: `0x${string}`, tokenOut?: `0x${string}`, 
     const run = async (first: boolean) => {
       if (first) setState({ status: 'loading' });
       try {
-        const quote = await getBestQuote(tokenIn, tokenOut, amountIn);
+        const quote = await getBestQuote(tokenIn, tokenOut, amountIn, account);
         if (!cancelled) setState(quote ? { status: 'ok', quote } : { status: 'none' });
       } catch (err) {
         console.error('[vlora] swap quote failed', err);

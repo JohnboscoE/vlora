@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAccount, useWriteContract, useSwitchChain, useSignMessage } from 'wagmi';
+import { useAccount, useWriteContract, useSwitchChain, useSignMessage, useSignTypedData, useSendTransaction } from 'wagmi';
 import { AgentPanel, type AgentVaultState } from './components/AgentPanel';
 import { agentChat, clearSession, ensureSession } from './lib/agentApi';
 import { readContract } from 'wagmi/actions';
@@ -49,6 +49,15 @@ import { useTokenBalances } from './hooks/useTokenBalances';
 import { formatTokenAmount, getTokens, getToken, type TokenInfo } from './tokens';
 import { getSwapVenue, swapRouter02Abi } from './swap-config';
 import { getBestQuote, type SwapQuote } from './lib/swapQuote';
+import {
+  AUTH_VALIDITY_S,
+  authorizationUsed,
+  buildAuthorization,
+  settleGasless,
+  TRANSFER_WITH_AUTHORIZATION_TYPES,
+  usdcDomain,
+  type TransferAuthorization,
+} from './lib/gasless';
 import { formatUnits } from 'viem';
 import { batchSenderAbi, getBatchSenderAddress } from './batch-config';
 import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN } from './chain-env';
@@ -61,6 +70,8 @@ const BATCH_LIVE = getBatchSenderAddress(ACTIVE_CHAIN_ID) != null;
 const ARC_NAMES_LIVE = getArcNamesAddress(ACTIVE_CHAIN_ID) != null;
 const SWAP_VENUE = getSwapVenue(ACTIVE_CHAIN_ID);
 const SWAPS_LIVE = SWAP_VENUE != null;
+// A LI.FI quote is signed as-is if a fresh one can't be fetched, but only while it's this young
+const LIFI_QUOTE_MAX_AGE_MS = 60_000;
 
 function friendlyWriteError(err: unknown): string {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -106,7 +117,9 @@ const CHAT_REPLIES = {
 
 const QUESTION_REPLIES: Record<QuestionTopic, string> = {
   swap: SWAPS_LIVE
-    ? `I swap between USDC, EURC and cirBTC through ${SWAP_VENUE?.name}, a Uniswap-style exchange on Arc. Just say "swap 10 USDC for EURC" (or "convert 5 EURC to USDC").\n\n` +
+    ? (SWAP_VENUE?.kind === 'lifi'
+        ? 'I swap between USDC, EURC and cirBTC through LI.FI, the aggregator behind the Arc Portal\'s swap — it finds the best price across Arc\'s exchanges. Just say "swap 10 USDC for EURC" (or "convert 5 EURC to USDC").\n\n'
+        : `I swap between USDC, EURC and cirBTC through ${SWAP_VENUE?.name}, a Uniswap-style exchange on Arc. Just say "swap 10 USDC for EURC" (or "convert 5 EURC to USDC").\n\n`) +
       'You\'ll see the live price, the minimum you\'ll receive, and the fee before your wallet signs. If the price moves more than 0.5%, the swap reverts and nothing changes. I can\'t route through Uniswap or other exchanges.'
     : 'Swaps aren\'t available on this network yet — there\'s no USDC/EURC market I can route to here, so nothing will be swapped.',
   liquidity:
@@ -211,6 +224,8 @@ export default function App() {
     agentModeRef.current = agentMode;
   }, [agentMode, agentVault]);
   const { signMessageAsync } = useSignMessage();
+  const { signTypedDataAsync } = useSignTypedData();
+  const { sendTransactionAsync } = useSendTransaction();
   const [draft, setDraft] = useState('');
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
@@ -370,6 +385,94 @@ export default function App() {
     setStep(tracker, 1, 'active');
     const outcome = await confirmTx(hash, `Sent ${amountLabel} ${token.symbol}. Transaction confirmed on ${ACTIVE_CHAIN.name}.`);
     setStep(tracker, 1, outcomeState(outcome));
+  }
+
+  /**
+   * Gasless USDC send: sign an EIP-3009 authorization (no transaction), then
+   * Circle's facilitator submits it and pays the fee. Never falls back to a
+   * second send automatically: if the outcome is unclear, the first can still land.
+   */
+  async function executeGaslessSend(recipient: `0x${string}`, amountRaw: bigint, amountLabel: string) {
+    const domain = usdcDomain();
+    if (!address || !domain) return;
+    const tracker = addTracker(`Sending ${amountLabel} USDC to ${shortAddr(recipient)} · gasless`, [
+      'Sign the authorization (no gas)',
+      'Circle submits it and pays the fee',
+      `Confirm on ${ACTIVE_CHAIN.name}`,
+    ]);
+
+    const auth = buildAuthorization(address, recipient, amountRaw);
+    let signature: `0x${string}`;
+    try {
+      signature = await signTypedDataAsync({
+        domain,
+        types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+        primaryType: 'TransferWithAuthorization',
+        message: auth,
+      });
+    } catch (err) {
+      setStep(tracker, 0, 'error');
+      addMessage(agentMsg(friendlyWriteError(err), 'error'));
+      return;
+    }
+    setStep(tracker, 0, 'done');
+    setStep(tracker, 1, 'active');
+
+    setIsConfirming(true);
+    let result: Awaited<ReturnType<typeof settleGasless>>;
+    try {
+      result = await settleGasless(auth, signature);
+    } finally {
+      setIsConfirming(false);
+    }
+
+    const successText = `Sent ${amountLabel} USDC — Circle paid the network fee. Confirmed on ${ACTIVE_CHAIN.name}.`;
+    if (result.status === 'success') {
+      setStep(tracker, 1, 'done');
+      setStep(tracker, 2, 'active');
+      const outcome = await confirmTx(result.transaction, successText);
+      setStep(tracker, 2, outcomeState(outcome));
+      return;
+    }
+
+    if (result.status === 'rejected') {
+      setStep(tracker, 1, 'error');
+      addMessage(
+        agentMsg(
+          `Circle couldn't sponsor this send (${result.reason}). Nothing moved. To pay the fee yourself, send it again and untick "Gasless".`,
+          'error',
+        ),
+      );
+      return;
+    }
+
+    // Outcome unknown: watch the chain for the authorization being used
+    const landed = await waitForAuthorization(auth);
+    void queryClient.invalidateQueries();
+    if (landed) {
+      setStep(tracker, 1, 'done');
+      setStep(tracker, 2, 'done');
+      addMessage(agentMsg(successText, 'success'));
+      return;
+    }
+    setStep(tracker, 1, 'pending');
+    const until = new Date(Number(auth.validBefore) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    addMessage(
+      agentMsg(
+        `Circle hasn't settled this yet (${result.reason}). It can still go through until ${until}, so don't send it again before then. Check your balance after that time.`,
+        'info',
+      ),
+    );
+  }
+
+  // Polls USDC's authorizationState for up to ~60s
+  async function waitForAuthorization(auth: TransferAuthorization): Promise<boolean> {
+    const deadline = Date.now() + Math.min(60_000, AUTH_VALIDITY_S * 1000);
+    while (Date.now() < deadline) {
+      if (await authorizationUsed(auth)) return true;
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+    return (await authorizationUsed(auth)) === true;
   }
 
   // Batch: (1) approve BatchSender for exactly the total, only if the current
@@ -588,13 +691,14 @@ export default function App() {
   // exactly amountIn if needed, then exactInputSingle with the reviewed minimum.
   async function executeSwap(check: Extract<SwapCheck, { ok: true }>, reviewed: SwapQuote) {
     if (!address) return;
+    if (check.venue.kind === 'lifi') return executeLifiSwap(check, reviewed);
     const { tokenIn, tokenOut, amountIn, venue } = check;
     const inLabel = `${amountIn.toString()} ${tokenIn.symbol}`;
     const minLabel = `${formatTokenAmount(Number(formatUnits(reviewed.minOut, tokenOut.decimals)), tokenOut.decimals)} ${tokenOut.symbol}`;
 
     let fresh: SwapQuote | null;
     try {
-      fresh = await getBestQuote(tokenIn.address, tokenOut.address, amountIn.raw);
+      fresh = await getBestQuote(tokenIn.address, tokenOut.address, amountIn.raw, address);
     } catch {
       fresh = null;
     }
@@ -678,6 +782,98 @@ export default function App() {
     setStep(tracker, step, 'done');
     setStep(tracker, step + 1, 'active');
     const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} on ${venue.name}.`);
+    setStep(tracker, step + 1, outcomeState(outcome));
+  }
+
+  /**
+   * LI.FI swap: approve exactly amountIn for the pinned LI.FI router if needed,
+   * then sign LI.FI's verified transaction (src/lib/lifi.ts). Its calldata enforces
+   * the minimum on-chain; we only ever sign a route whose minimum is at least the
+   * one the user reviewed.
+   */
+  async function executeLifiSwap(check: Extract<SwapCheck, { ok: true }>, reviewed: SwapQuote) {
+    if (!address || !reviewed.lifi) return;
+    const { tokenIn, tokenOut, amountIn, venue } = check;
+    const inLabel = `${amountIn.toString()} ${tokenIn.symbol}`;
+
+    let allowance: bigint;
+    try {
+      allowance = await readContract(config, {
+        address: tokenIn.address,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [address, venue.router],
+        chainId: ACTIVE_CHAIN_ID,
+      });
+    } catch {
+      addMessage(agentMsg(`Couldn't read your ${tokenIn.symbol} allowance from ${ACTIVE_CHAIN.name}. Please try again.`, 'error'));
+      return;
+    }
+    const needsApproval = allowance < amountIn.raw;
+    const tracker = addTracker(`Swapping ${inLabel} → ${tokenOut.symbol} via LI.FI`, [
+      ...(needsApproval ? [`Approve exactly ${inLabel}`] : []),
+      'Sign the swap',
+      `Confirm on ${ACTIVE_CHAIN.name}`,
+    ]);
+    let step = 0;
+
+    if (needsApproval) {
+      let approveHash: `0x${string}`;
+      try {
+        approveHash = await writeContractAsync({
+          address: tokenIn.address,
+          abi: erc20Abi,
+          functionName: 'approve',
+          args: [venue.router, amountIn.raw],
+          chainId: ACTIVE_CHAIN_ID,
+        });
+      } catch (err) {
+        setStep(tracker, 0, 'error');
+        addMessage(agentMsg(friendlyWriteError(err), 'error'));
+        return;
+      }
+      const approved = await confirmTx(approveHash, '', true);
+      if (approved !== 'success') {
+        setStep(tracker, 0, outcomeState(approved));
+        return;
+      }
+      setStep(tracker, 0, 'done');
+      step = 1;
+      setStep(tracker, step, 'active');
+    }
+
+    // Prefer a fresh route (DEX calldata can go stale), but never a worse minimum
+    let fresh: SwapQuote | null = null;
+    try {
+      fresh = await getBestQuote(tokenIn.address, tokenOut.address, amountIn.raw, address);
+    } catch {
+      fresh = null;
+    }
+    let route: SwapQuote;
+    if (fresh?.lifi && fresh.minOut >= reviewed.minOut) {
+      route = fresh;
+    } else if (!fresh && Date.now() - reviewed.quotedAt < LIFI_QUOTE_MAX_AGE_MS) {
+      route = reviewed;
+    } else {
+      setStep(tracker, step, 'error');
+      addMessage(agentMsg(`The ${tokenIn.symbol} → ${tokenOut.symbol} price moved since you reviewed it, so I stopped. Send the command again for a fresh quote.`, 'error'));
+      return;
+    }
+    const lifi = route.lifi!;
+    const minLabel = `${formatTokenAmount(Number(formatUnits(route.minOut, tokenOut.decimals)), tokenOut.decimals)} ${tokenOut.symbol}`;
+
+    let hash: `0x${string}`;
+    try {
+      hash = await sendTransactionAsync({ to: lifi.to, data: lifi.data, value: 0n, chainId: ACTIVE_CHAIN_ID });
+    } catch (err) {
+      setStep(tracker, step, 'error');
+      addMessage(agentMsg(friendlyWriteError(err), 'error'));
+      return;
+    }
+
+    setStep(tracker, step, 'done');
+    setStep(tracker, step + 1, 'active');
+    const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} (${lifi.tool} via LI.FI).`);
     setStep(tracker, step + 1, outcomeState(outcome));
   }
 
@@ -1009,7 +1205,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
     }
   }
 
-  async function handleConfirm(quote?: SwapQuote) {
+  async function handleConfirm({ quote, gasless }: { quote?: SwapQuote; gasless?: boolean } = {}) {
     if (!pendingIntent || !address || !usdcFact) return;
 
     if (pendingIntent.type === 'send') {
@@ -1021,7 +1217,11 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
       const intent = pendingIntent;
       setPendingIntent(null);
       if (!(await namesStillMatch([intent.recipient]))) return;
-      void executeSend(check.token, intent.recipient as `0x${string}`, check.amount.raw, intent.amount);
+      if (gasless && check.token.symbol === 'USDC') {
+        void executeGaslessSend(intent.recipient as `0x${string}`, check.amount.raw, intent.amount);
+      } else {
+        void executeSend(check.token, intent.recipient as `0x${string}`, check.amount.raw, intent.amount);
+      }
     } else if (pendingIntent.type === 'batch') {
       const check = validateBatch(pendingIntent, balances.USDC);
       if (!check.ok) {
@@ -1332,7 +1532,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
         {pendingIntent && (
           <IntentPreview
             intent={pendingIntent}
-            onConfirm={(quote) => void handleConfirm(quote)}
+            onConfirm={(opts) => void handleConfirm(opts)}
             onCancel={handleCancel}
             isPending={isPending}
             isConfirming={isConfirming}

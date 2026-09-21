@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BaseError, ContractFunctionRevertedError, erc20Abi, formatUnits } from 'viem';
+import { BaseError, ContractFunctionRevertedError, erc20Abi, ExecutionRevertedError, formatUnits, type Hex } from 'viem';
 import { getPublicClient } from 'wagmi/actions';
 import { config } from '@/config';
 import { ACTIVE_CHAIN_ID } from '@/chain-env';
@@ -7,12 +7,25 @@ import { getUsdc } from '@/onchain-facts';
 import { gasTokenDecimalsFor, isGasTokenUsdc, usdcDecimalsFor } from '@/onchain-money';
 import { batchSenderAbi } from '@/batch-config';
 import { arcNamesAbi, ARC_NAME_REGISTER_GAS } from '@/arcnames-config';
-import { swapRouter02Abi, SWAP_GAS_ESTIMATE } from '@/swap-config';
+import { LIFI_GAS_ESTIMATE, swapRouter02Abi, SWAP_GAS_ESTIMATE } from '@/swap-config';
 
 /** A transaction the preview should dry-run before the wallet is asked to sign */
 export type PlannedTx =
-  /** spendsGasToken: the token is USDC, which also pays Arc's network fee */
-  | { kind: 'send'; token: `0x${string}`; spendsGasToken: boolean; recipient: `0x${string}`; amountRaw: bigint }
+  /**
+   * spendsGasToken: the token is USDC, which also pays Arc's network fee.
+   * gasless: Circle's facilitator submits it and pays the fee (USDC only).
+   */
+  | { kind: 'send'; token: `0x${string}`; spendsGasToken: boolean; recipient: `0x${string}`; amountRaw: bigint; gasless?: boolean }
+  /** A LI.FI aggregator swap: an already-verified transaction to the pinned router */
+  | {
+      kind: 'lifi';
+      router: `0x${string}`;
+      tokenIn: `0x${string}`;
+      amountIn: bigint;
+      data: Hex;
+      gasLimit?: bigint;
+      spendsGasToken: boolean;
+    }
   | {
       kind: 'swap';
       router: `0x${string}`;
@@ -31,7 +44,7 @@ export type TxPreview =
   | { status: 'idle' }
   | { status: 'checking' }
   /** needsApproval: batch will first ask for a USDC approval (2 signatures) */
-  | { status: 'ok'; feeLabel: string; feeIsEstimate: boolean; needsApproval: boolean }
+  | { status: 'ok'; feeLabel: string; feeIsEstimate: boolean; needsApproval: boolean; gasless?: boolean }
   /** The chain says this transaction would revert — block signing */
   | { status: 'fail'; reason: string }
   /** Couldn't reach the RPC etc. — don't block, but say we couldn't check */
@@ -49,6 +62,7 @@ function spendOf(tx: PlannedTx): bigint {
     case 'send':
       return tx.spendsGasToken ? tx.amountRaw : 0n;
     case 'swap':
+    case 'lifi':
       return tx.spendsGasToken ? tx.amountIn : 0n;
     case 'batch':
       return tx.totalRaw;
@@ -79,6 +93,14 @@ function revertReason(err: unknown): string | null {
   if (reverted.reason === 'Too little received') return 'The price moved more than 0.5% since the quote. Close and try again for a fresh quote.';
   if (reverted.reason === 'STF') return 'The token transfer failed — check your balance.';
   return reverted.reason ?? reverted.shortMessage ?? 'The transaction would fail on-chain.';
+}
+
+// A raw eth_call (LI.FI calldata) reverts with ExecutionRevertedError, not a decoded contract error
+function rawRevertReason(err: unknown): string | null {
+  if (!(err instanceof BaseError)) return null;
+  const reverted = err.walk((e) => e instanceof ExecutionRevertedError);
+  if (!(reverted instanceof ExecutionRevertedError)) return null;
+  return 'The swap would fail at this price. Close and try again for a fresh quote.';
 }
 
 /**
@@ -232,6 +254,42 @@ export function useTxPreview(tx: PlannedTx | null, account: `0x${string}` | unde
           return;
         }
 
+        if (tx.kind === 'lifi') {
+          const allowance = await client.readContract({ address: tx.tokenIn, abi: erc20Abi, functionName: 'allowance', args: [account, tx.router] });
+          if (allowance >= tx.amountIn) {
+            // Runs LI.FI's exact calldata against the live chain, minimum included
+            await client.call({ account, to: tx.router, data: tx.data });
+            const gas = await client.estimateGas({ account, to: tx.router, data: tx.data });
+            await finish(gas * gasPrice, false, false);
+            return;
+          }
+          const approveCall = {
+            account,
+            address: tx.tokenIn,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [tx.router, tx.amountIn],
+          } as const;
+          await client.simulateContract(approveCall);
+          const approveGas = await client.estimateContractGas(approveCall);
+          await finish((approveGas + (tx.gasLimit ?? LIFI_GAS_ESTIMATE)) * gasPrice, true, true);
+          return;
+        }
+
+        if (tx.kind === 'send' && tx.gasless) {
+          // Circle submits the transfer and pays the fee: dry-run the same transfer
+          // (balance, blocklist), but the wallet needs no gas
+          await client.simulateContract({
+            account,
+            address: tx.token,
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [tx.recipient, tx.amountRaw],
+          });
+          if (!cancelled) setPreview({ status: 'ok', feeLabel: '0 USDC', feeIsEstimate: false, needsApproval: false, gasless: true });
+          return;
+        }
+
         if (tx.kind === 'send') {
           const call = {
             account,
@@ -288,7 +346,7 @@ export function useTxPreview(tx: PlannedTx | null, account: `0x${string}` | unde
         await finish((approveGas + batchGas) * gasPrice, true, true);
       } catch (err) {
         if (cancelled) return;
-        const reason = revertReason(err);
+        const reason = revertReason(err) ?? (tx.kind === 'lifi' ? rawRevertReason(err) : null);
         if (!reason) console.error('[vlora] dry run failed (could not reach Arc)', err);
         setPreview(reason ? { status: 'fail', reason } : { status: 'unknown' });
       }

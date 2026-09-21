@@ -1,10 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/agent/chat.js": { "maxDuration": 120 }
+    "api/agent/chat.js": {
+      "maxDuration": 120
+    },
+    "api/gasless/settle.js": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/rpc/mainnet", "destination": "https://rpc.mainnet.arc.io/" },
-    { "source": "/rpc/testnet", "destination": "https://rpc.testnet.arc.io/" }
+    {
+      "source": "/rpc/mainnet",
+      "destination": "https://rpc.mainnet.arc.io/"
+    },
+    {
+      "source": "/rpc/testnet",
+      "destination": "https://rpc.testnet.arc.io/"
+    },
+    {
+      "source": "/lifi/:path*",
+      "destination": "https://li.quest/v1/:path*"
+    }
   ]
 }

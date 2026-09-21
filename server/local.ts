@@ -3,10 +3,12 @@
 import './loadEnv'; // must stay first: sets env before chain.ts picks the network
 import { createServer, type IncomingMessage } from 'node:http';
 import { handleAgent, type AgentRoute } from './handler';
+import { handleGasless, type GaslessRoute } from './gasless';
 import { CHAIN_ID, NETWORK_NAME } from './chain';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ROUTES = new Set<AgentRoute>(['info', 'nonce', 'login', 'chat']);
+const GASLESS_ROUTES = new Set<GaslessRoute>(['info', 'settle']);
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
   const chunks: Buffer[] = [];
@@ -19,12 +21,16 @@ async function toRequest(req: IncomingMessage): Promise<Request> {
 
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
-  const route = url.pathname.replace(/^\/api\/agent\//, '') as AgentRoute;
-  const response = ROUTES.has(route)
-    ? await handleAgent(route, await toRequest(req))
-    : Response.json({ error: 'not found' }, { status: 404 });
+  const agentRoute = url.pathname.match(/^\/api\/agent\/(\w+)$/)?.[1] as AgentRoute | undefined;
+  const gaslessRoute = url.pathname.match(/^\/api\/gasless\/(\w+)$/)?.[1] as GaslessRoute | undefined;
+  const response =
+    agentRoute && ROUTES.has(agentRoute)
+      ? await handleAgent(agentRoute, await toRequest(req))
+      : gaslessRoute && GASLESS_ROUTES.has(gaslessRoute)
+        ? await handleGasless(gaslessRoute, await toRequest(req))
+        : Response.json({ error: 'not found' }, { status: 404 });
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
 }).listen(PORT, () => {
-  console.log(`Vlora agent server on http://localhost:${PORT} — ${NETWORK_NAME} (chain ${CHAIN_ID}); the Vite dev server proxies /api/agent here`);
+  console.log(`Vlora agent server on http://localhost:${PORT} — ${NETWORK_NAME} (chain ${CHAIN_ID}); the Vite dev server proxies /api/agent and /api/gasless here`);
 });

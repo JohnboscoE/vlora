@@ -19,6 +19,7 @@ import {
 import type { ArcNameIntent, BatchIntent, ParsedIntent, SwapIntent } from '../utils/intentParser';
 import { formatUnits } from 'viem';
 import { useSwapQuote, type QuoteState, type SwapQuote } from '@/lib/swapQuote';
+import { useGaslessEnabled } from '@/lib/gasless';
 import type { TokenBalances } from '@/hooks/useTokenBalances';
 import { getSwapVenue } from '@/swap-config';
 import { formatTokenAmount } from '@/tokens';
@@ -39,8 +40,11 @@ function formatAddr(addr: string) {
 
 interface IntentPreviewProps {
   intent: ParsedIntent;
-  /** For swaps, the quote the user reviewed (fee tier + minimum output) */
-  onConfirm: (quote?: SwapQuote) => void;
+  /**
+   * quote: for swaps, the quote the user reviewed (route + minimum output).
+   * gasless: for USDC sends, Circle submits it and pays the network fee.
+   */
+  onConfirm: (opts: { quote?: SwapQuote; gasless?: boolean }) => void;
   onCancel: () => void;
   isPending: boolean;
   isConfirming: boolean;
@@ -91,7 +95,12 @@ export function IntentPreview({
 
   // Live quote for swaps that pass the local checks
   const swapCheck = intent.type === 'swap' && sendCheck?.ok && 'venue' in sendCheck ? sendCheck : null;
-  const quote = useSwapQuote(swapCheck?.tokenIn.address, swapCheck?.tokenOut.address, swapCheck?.amountIn.raw);
+  const quote = useSwapQuote(swapCheck?.tokenIn.address, swapCheck?.tokenOut.address, swapCheck?.amountIn.raw, account);
+
+  // Gasless (Circle Facilitator) is offered for USDC sends when the server has it on
+  const gaslessAvailable = useGaslessEnabled() && intent.type === 'send' && intent.token.toUpperCase() === 'USDC';
+  const [gaslessChoice, setGaslessChoice] = useState(true);
+  const gasless = gaslessAvailable && gaslessChoice;
 
   // Only dry-run transactions that already pass the local checks
   let planned: PlannedTx | null = null;
@@ -102,6 +111,17 @@ export function IntentPreview({
       spendsGasToken: sendCheck.token.symbol === 'USDC',
       recipient: intent.recipient as `0x${string}`,
       amountRaw: sendCheck.amount.raw,
+      gasless,
+    };
+  } else if (swapCheck && quote.status === 'ok' && quote.quote.lifi) {
+    planned = {
+      kind: 'lifi',
+      router: quote.quote.lifi.to,
+      tokenIn: swapCheck.tokenIn.address,
+      amountIn: swapCheck.amountIn.raw,
+      data: quote.quote.lifi.data,
+      gasLimit: quote.quote.lifi.gasLimit,
+      spendsGasToken: swapCheck.tokenIn.symbol === 'USDC',
     };
   } else if (swapCheck && quote.status === 'ok') {
     planned = {
@@ -200,7 +220,13 @@ export function IntentPreview({
               intent.type === 'swap' && swapCheck ? (
                 <SwapRows intent={intent} check={swapCheck} quote={quote} sim={sim} />
               ) : (
-                <IntentRows intent={intent} contacts={contacts} arcLabels={arcLabels} sim={sim} />
+                <IntentRows
+                  intent={intent}
+                  contacts={contacts}
+                  arcLabels={arcLabels}
+                  sim={sim}
+                  gasless={gaslessAvailable ? { on: gaslessChoice, set: setGaslessChoice, editable: !busy } : undefined}
+                />
               )
             )}
           </div>
@@ -235,7 +261,7 @@ export function IntentPreview({
           ) : (
             <button
               disabled={confirmDisabled}
-              onClick={() => onConfirm(quote.status === 'ok' ? quote.quote : undefined)}
+              onClick={() => onConfirm({ quote: quote.status === 'ok' ? quote.quote : undefined, gasless })}
               className="mt-2 w-full rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {previewOnly ? (
@@ -316,6 +342,8 @@ function SimulationNotice({ sim, kind }: { sim: TxPreview; kind: ParsedIntent['t
           ? sim.needsApproval
             ? 'Checks passed. Two signatures: a one-time approval for the exact total, then the batch — all-or-nothing.'
             : 'Simulated on-chain: the batch succeeds. One signature, all-or-nothing.'
+          : sim.gasless
+          ? 'Simulated on-chain: this transfer succeeds. You sign once — no transaction, no gas. Circle submits it and pays the network fee.'
           : 'Simulated on-chain: this transfer succeeds.'}
       </Notice>
     );
@@ -324,6 +352,7 @@ function SimulationNotice({ sim, kind }: { sim: TxPreview; kind: ParsedIntent['t
 }
 
 function FeeValue({ sim }: { sim: TxPreview }) {
+  if (sim.status === 'ok' && sim.gasless) return <span className="font-medium text-success">Free · paid by Circle</span>;
   if (sim.status === 'ok') return <>{sim.feeIsEstimate ? `≈ ${sim.feeLabel}` : `~${sim.feeLabel}`}</>;
   if (sim.status === 'checking') return <Loader2 className="size-3.5 animate-spin text-muted" />;
   return <span className="font-medium text-muted">Paid in USDC</span>;
@@ -559,16 +588,23 @@ function SwapRows({
           </Row>
           <Row label="Route">
             <span className="font-medium text-ink-2">
-              {venue.name} · {q.fee / 10_000}% pool
+              {q.lifi ? `${q.lifi.tool} via LI.FI` : `${venue.name} · ${q.fee / 10_000}% pool`}
             </span>
           </Row>
+          {q.lifi && q.lifi.feeUsd > 0 && (
+            <Row label="LI.FI fee">
+              <span className="font-medium text-ink-2">~${q.lifi.feeUsd.toFixed(3)} (included)</span>
+            </Row>
+          )}
         </>
       )}
       <Row label="Network fee">
         <FeeValue sim={sim} />
       </Row>
       {quote.status === 'none' && (
-        <p className="text-xs text-danger">No {venue.name} pool can fill this size right now. Try a smaller amount.</p>
+        <p className="text-xs text-danger">
+          {venue.kind === 'lifi' ? 'LI.FI found no route' : `No ${venue.name} pool can fill this size`} right now. Try a smaller amount.
+        </p>
       )}
       {quote.status === 'error' && <p className="text-xs text-danger">Couldn't get a price from {venue.name}. Close and try again.</p>}
       {q && (
@@ -652,11 +688,14 @@ function IntentRows({
   contacts,
   arcLabels,
   sim,
+  gasless,
 }: {
   intent: ParsedIntent;
   contacts: Contact[];
   arcLabels: Record<string, string>;
   sim: TxPreview;
+  /** Present when a gasless send is possible */
+  gasless?: { on: boolean; set: (on: boolean) => void; editable: boolean };
 }) {
   switch (intent.type) {
     case 'send':
@@ -674,6 +713,21 @@ function IntentRows({
           <Row label="Network fee">
             <FeeValue sim={sim} />
           </Row>
+          {gasless && (
+            <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-line/10 pt-3 text-sm">
+              <span>
+                <span className="font-medium text-ink">Gasless</span>
+                <span className="block text-xs text-muted">Sign once; Circle submits it and pays the fee</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={gasless.on}
+                disabled={!gasless.editable}
+                onChange={(e) => gasless.set(e.target.checked)}
+                className="size-4 accent-[rgb(var(--brand))]"
+              />
+            </label>
+          )}
         </div>
       );
 

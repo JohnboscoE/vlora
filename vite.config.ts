@@ -37,9 +37,12 @@ export default defineConfig({
   server: {
     allowedHosts: true,
     cors: true,
-    // Agent API (server/index.ts) — only needed when using agent wallets
+    // Agent + gasless API (server/local.ts, `npm run agent`)
     proxy: {
       '/api/agent': 'http://localhost:8787',
+      '/api/gasless': 'http://localhost:8787',
+      // LI.FI swap quotes (mirrors vercel.json)
+      '/lifi': { target: 'https://li.quest', changeOrigin: true, rewrite: (p) => p.replace(/^\/lifi/, '/v1') },
       // Same-origin RPC (mirrors the rewrites in vercel.json): ad blockers block *.arc.io
       '/rpc/mainnet': { target: 'https://rpc.mainnet.arc.io', changeOrigin: true, rewrite: () => '/' },
       '/rpc/testnet': { target: 'https://rpc.testnet.arc.io', changeOrigin: true, rewrite: () => '/' },

@@ -11,7 +11,8 @@ This is the **project memory** - what Arc Studio remembers about building this a
 Chat-style app: type a plain-English command ("send 5 USDC to 0x…", "check my balance"), review a confirmation sheet, then execute on Arc. Parsing is regex pattern matching (`src/utils/intentParser.ts`), not an LLM.
 
 - Works: USDC send (`erc20Abi.transfer`), USDC balance check.
-- Preview only: swap and add-liquidity (parsed + previewed, never executed).
+- Swaps: Synthra on testnet, LI.FI on mainnet (`src/lib/lifi.ts` verifies every returned transaction). Add-liquidity is preview only.
+- Gasless USDC sends via Circle's Facilitator (`server/gasless.ts`, `src/lib/gasless.ts`), on only when `CIRCLE_API_KEY` is set.
 - Every send is gated by `src/utils/validateSend.ts` (USDC only, valid address, amount > 0 and within 6 decimals, not above balance) in both the preview and at confirm time.
 - Testnet/mainnet: flip `IS_MAINNET` in `src/chain-env.ts`; nothing else should hardcode a chain.
 

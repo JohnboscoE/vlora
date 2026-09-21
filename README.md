@@ -19,12 +19,13 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 
 | Feature | Arc Testnet | Arc mainnet |
 |---|---|---|
-| Send USDC, EURC, cirBTC | ✅ | USDC only (EURC/cirBTC addresses not published yet) |
+| Send USDC, EURC, cirBTC | ✅ | ✅ |
+| Gasless USDC sends (Circle pays the fee) | ✅ with `CIRCLE_API_KEY` | ✅ with `CIRCLE_API_KEY` |
 | Balances | ✅ | ✅ |
 | Contacts, saved batches, CSV import | ✅ | ✅ |
 | Payment request links | ✅ | ✅ |
 | Pay and register `.arc` names ([ArcNames](https://github.com/JohnboscoE/ArcNames)) — 0.01 USDC/year on mainnet | ✅ | ✅ |
-| Swaps USDC ⇄ EURC ⇄ cirBTC via Synthra | ✅ | off until Synthra publishes mainnet pools |
+| Swaps USDC ⇄ EURC ⇄ cirBTC | ✅ via Synthra | ✅ via LI.FI (the Arc Portal's swap aggregator) |
 | Batch payments (many recipients, one tx) | ✅ | ✅ |
 | Voice input (speech to text) | ✅ | ✅ |
 | Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only (no swaps yet) |
@@ -35,7 +36,8 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 - **Voice input** — tap the mic and say *"send 5 USDC to james dot arc"*. Speech becomes text in the input (browser Web Speech API: Chrome, Edge, Safari); nothing is sent until you review it and press Enter.
 - **Check before you sign** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
-- **Swaps** — best quote across Synthra fee tiers, refreshed every 20s, with a 0.5% slippage guard and a re-quote just before signing.
+- **Swaps** — testnet: best quote across Synthra fee tiers; mainnet: LI.FI, the aggregator behind the Arc Portal's swap page. Quotes refresh every 20s, with a 0.5% slippage guard and a re-quote just before signing. LI.FI returns a ready-made transaction, so Vlora decodes and checks it (pinned router, receiver = you, exact input, output token, on-chain minimum) before it can be signed.
+- **Gasless USDC sends** — when the server has a Circle API key, USDC sends offer a *Gasless* toggle: you sign an EIP-3009 authorization (no transaction), and [Circle's Facilitator Service](https://developers.circle.com/facilitator-service) submits it and pays the network fee. See [Gasless sends](#gasless-sends-circle-facilitator).
 - **Batch payments** — `send 10 USDC to 0xA, 25 to 0xB` or a CSV. One all-or-nothing transaction through `BatchSender`; rows are editable in the preview.
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
 - **Payment links** — `request 25 USDC` gives a link that prefills a send for the payer, who still reviews and signs.
@@ -54,7 +56,9 @@ src/
   hooks/useTxPreview.ts  on-chain dry run + fee estimate
   hooks/useSpeechToText.ts · lib/speechNormalize.ts   voice input
   lib/watchTx.ts         receipt watcher (success / reverted / dropped / timeout)
-  lib/swapQuote.ts       Synthra QuoterV2 best-tier quotes
+  lib/swapQuote.ts       swap quotes: Synthra QuoterV2 (testnet), LI.FI (mainnet)
+  lib/lifi.ts            LI.FI quote fetch + calldata verification
+  lib/gasless.ts         EIP-3009 signing + Circle settlement client
   chain-env.ts           testnet ⇄ mainnet switch (IS_MAINNET)
   tokens.ts · swap-config.ts · batch-config.ts · arcnames-config.ts · agent-config.ts
 contracts/
@@ -163,11 +167,22 @@ In the panel you can **Pause/Resume**, **Extend 7d** (also re-points the vault a
 
 The agent uses Claude Haiku 4.5, the cheapest current model — roughly $3 per 1,000 messages. It only maps requests onto four tools; the safety-critical checks are deterministic code and on-chain limits.
 
+## Gasless sends (Circle Facilitator)
+
+USDC sends can skip the network fee: the wallet signs a `TransferWithAuthorization` (EIP-3009, valid for 10 minutes, random nonce, exact amount and recipient), `server/gasless.ts` verifies the signature and forwards it to Circle's Facilitator Service (`POST /v1/facilitator/x402/settle`), and Circle submits the transfer and pays the gas.
+
+| Variable | What it is |
+|---|---|
+| `CIRCLE_API_KEY` | A Circle API key: `TEST_API_KEY:…` for Arc Testnet, `LIVE_API_KEY:…` for mainnet. Unset → the toggle is hidden and sends work as before. |
+| `CIRCLE_FACILITATOR_URL` | Optional. Defaults to `https://api.circle.com`. |
+
+Set it in `server/.env` (local, with `npm run agent`) or in Vercel's environment variables, then redeploy. `/api/gasless/info` says whether it's on (and, if not, which variable is wrong — never the key itself). If Circle rejects a send, nothing moves and the app says so; if the outcome is unclear, it watches the chain and never sends a second copy automatically.
+
 ## Mainnet
 
 The network is chosen at build time by `VITE_ARC_NETWORK`: set it to `mainnet` in Vercel's environment variables for the production site; leave it unset locally to develop on Arc Testnet. Every chain id, RPC (with fallbacks), explorer, contract address and landing-page feature list follows from it.
 
-Live on mainnet: USDC sends, balances, contacts, payment links, voice input, batch payments and `.arc` names. Still off on mainnet: swaps and EURC/cirBTC (add verified token addresses to `src/tokens.ts` and a venue to `src/swap-config.ts` once pools exist) while the agent wallet on mainnet can send USDC but not swap. The agent server follows the same `VITE_ARC_NETWORK` variable, so it always runs on the network the site shows.
+Live on mainnet: USDC, EURC and cirBTC sends, balances, contacts, payment links, voice input, batch payments, `.arc` names and swaps through LI.FI (`/lifi/*` is proxied to `li.quest/v1` like the RPC). The agent wallet on mainnet holds and sends USDC only (no swaps yet). The agent server follows the same `VITE_ARC_NETWORK` variable, so it always runs on the network the site shows.
 
 ## Troubleshooting
 
@@ -186,8 +201,10 @@ Live on mainnet: USDC sends, balances, contacts, payment links, voice input, bat
 - Keys and API keys live only in git-ignored `.env` files or Vercel environment variables. Never commit them, and never use a personal wallet's key as the agent key.
 - Voice input uses the browser's speech recognition; Chrome and Edge send audio to their servers for transcription. Nothing is executed until you press Enter.
 - Token addresses are pinned in `src/tokens.ts`; same-named copies exist on testnet, so tokens are added only after verifying real liquidity.
-- Swaps pass a minimum-output guard; batch and name-fee approvals are for the exact amount only.
+- Swaps pass a minimum-output guard; swap, batch and name-fee approvals are for the exact amount only.
+- LI.FI transactions are only signed after decoding: they must target the pinned LI.FI router, pay out to your address, spend exactly your input, and enforce at least the minimum you reviewed.
+- Gasless authorizations expire after 10 minutes and are single-use (EIP-3009 nonce); the server verifies each signature before forwarding it and holds no keys.
 
 ## Credits
 
-Scaffolded with Arc Studio. Uses Synthra pools for swaps and [ArcNames](https://github.com/JohnboscoE/ArcNames) for `.arc` names. Landing shader adapted from [Paper Shaders](https://shaders.paper.design) (Apache-2.0) via the 21st.dev Shader Builder.
+Scaffolded with Arc Studio. Uses Synthra pools (testnet) and LI.FI (mainnet) for swaps, Circle's Facilitator Service for gasless sends, and [ArcNames](https://github.com/JohnboscoE/ArcNames) for `.arc` names. Landing shader adapted from [Paper Shaders](https://shaders.paper.design) (Apache-2.0) via the 21st.dev Shader Builder.

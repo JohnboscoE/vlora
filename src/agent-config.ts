@@ -3,6 +3,7 @@
  * the agent turned off. Beta on both networks (mainnet: USDC sends only).
  */
 import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
+import { getTokens, type TokenInfo } from './tokens';
 
 const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
   // Deployed 2026-09-18, tx 0x1043edf12537df51982d55f36587b6fff2ac15b5a26af897db4210be22c148fb
@@ -14,6 +15,12 @@ const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
 
 export function getAgentFactory(chainId: number): `0x${string}` | undefined {
   return AGENT_VAULT_FACTORIES[chainId];
+}
+
+/** Tokens an agent wallet holds and has limits for. Mainnet: USDC only (the server's tools match). */
+export function getAgentTokens(chainId: number): TokenInfo[] {
+  const tokens = getTokens(chainId);
+  return chainId === ARC_MAINNET_ID ? tokens.filter((t) => t.symbol === 'USDC') : tokens;
 }
 
 /** Proxied to the agent server by vite.config.ts */

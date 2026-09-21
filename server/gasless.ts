@@ -1,0 +1,281 @@
+// Gasless USDC sends through Circle's Facilitator Service (x402 `exact` scheme,
+// EIP-3009 transferWithAuthorization). The user signs a TransferWithAuthorization
+// in their wallet; this server checks it and hands it to Circle, which submits
+// the transfer and pays the gas. The server never holds funds or keys: the
+// signature only authorizes that exact amount to that exact recipient.
+//
+// Env: CIRCLE_API_KEY (TEST_API_KEY:… on testnet, LIVE_API_KEY:… on mainnet).
+// Unset → gasless is off and the app sends normally.
+import { getAddress, isAddress, isHex, verifyTypedData, type Address, type Hex } from 'viem';
+import { CHAIN_ID, publicClient } from './chain';
+
+export type GaslessRoute = 'info' | 'settle';
+
+const USDC: Address = '0x3600000000000000000000000000000000000000';
+const NETWORK = `eip155:${CHAIN_ID}`;
+const DEFAULT_API = 'https://api.circle.com';
+
+// Same domain as the USDC contract; checked against DOMAIN_SEPARATOR() on both Arc networks
+export const USDC_DOMAIN = { name: 'USDC', version: '2', chainId: CHAIN_ID, verifyingContract: USDC } as const;
+export const TRANSFER_WITH_AUTHORIZATION_TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' },
+  ],
+} as const;
+
+const authorizationStateAbi = [
+  {
+    type: 'function',
+    name: 'authorizationState',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'authorizer', type: 'address' },
+      { name: 'nonce', type: 'bytes32' },
+    ],
+    outputs: [{ type: 'bool' }],
+  },
+] as const;
+
+// Authorizations must expire soon: a signature that can't settle later can't surprise anyone
+const MAX_VALIDITY_S = 30 * 60;
+const MIN_VALIDITY_S = 60;
+// Circle may wait this long for a terminal result before answering "pending"
+const SETTLE_WAIT_S = 20;
+
+function env(name: string): string {
+  return (process.env[name] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+}
+
+/** null = ready; otherwise why gasless is off (never includes the key itself) */
+function configProblem(): string | null {
+  const key = env('CIRCLE_API_KEY');
+  if (!key) return 'CIRCLE_API_KEY is not set';
+  const testnet = CHAIN_ID !== 5042;
+  if (testnet && key.startsWith('LIVE_API_KEY:')) return 'CIRCLE_API_KEY is a mainnet (LIVE) key but the app is on Arc Testnet';
+  if (!testnet && key.startsWith('TEST_API_KEY:')) return 'CIRCLE_API_KEY is a testnet (TEST) key but the app is on Arc mainnet';
+  return null;
+}
+
+const json = (status: number, body: unknown) => Response.json(body, { status });
+
+// Best-effort, per instance (see handler.ts). Circle rate-limits and screens too.
+const recent = new Map<string, number[]>();
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 5;
+
+interface Authorization {
+  from: Address;
+  to: Address;
+  value: bigint;
+  validAfter: bigint;
+  validBefore: bigint;
+  nonce: Hex;
+}
+
+function parseAuthorization(raw: unknown): Authorization | string {
+  if (!raw || typeof raw !== 'object') return 'authorization is required';
+  const a = raw as Record<string, unknown>;
+  const from = String(a.from ?? '');
+  const to = String(a.to ?? '');
+  const nonce = String(a.nonce ?? '');
+  if (!isAddress(from) || !isAddress(to)) return 'invalid address';
+  if (!isHex(nonce) || nonce.length !== 66) return 'invalid nonce';
+  let value: bigint, validAfter: bigint, validBefore: bigint;
+  try {
+    value = BigInt(String(a.value));
+    validAfter = BigInt(String(a.validAfter));
+    validBefore = BigInt(String(a.validBefore));
+  } catch {
+    return 'invalid number';
+  }
+  if (value <= 0n) return 'amount must be above 0';
+  if (getAddress(from) === getAddress(to)) return 'sender and recipient are the same';
+  return { from: getAddress(from), to: getAddress(to), value, validAfter, validBefore, nonce: nonce as Hex };
+}
+
+export type SettleResult =
+  | { status: 'success'; transaction: Hex }
+  /** Circle recorded it and is still settling; the signature can still land */
+  | { status: 'pending'; reason: string }
+  /** Circle rejected it before recording: nothing moved and the signature won't be used */
+  | { status: 'rejected'; reason: string };
+
+export async function handleGasless(route: GaslessRoute, request: Request): Promise<Response> {
+  const problem = configProblem();
+  if (route === 'info' && request.method === 'GET') {
+    // Only a yes/no plus a variable name for diagnosis — never the key
+    return json(200, { enabled: problem == null, chainId: CHAIN_ID, ...(problem ? { reason: problem } : {}) });
+  }
+  if (route !== 'settle' || request.method !== 'POST') return json(405, { error: 'method not allowed' });
+  if (problem) {
+    console.error(`[gasless] misconfigured: ${problem}`);
+    return json(503, { status: 'rejected', reason: 'Gasless sends are not configured on this server.' });
+  }
+
+  try {
+    const text = await request.text();
+    if (text.length > 5_000) return json(413, { status: 'rejected', reason: 'body too large' });
+    const body = (text ? JSON.parse(text) : {}) as Record<string, unknown>;
+    const auth = parseAuthorization(body.authorization);
+    const signature = String(body.signature ?? '');
+    if (typeof auth === 'string') return json(400, { status: 'rejected', reason: auth });
+    if (!isHex(signature)) return json(400, { status: 'rejected', reason: 'invalid signature' });
+
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    if (auth.validAfter > now) return json(400, { status: 'rejected', reason: 'authorization is not valid yet' });
+    if (auth.validBefore < now + BigInt(MIN_VALIDITY_S) || auth.validBefore > now + BigInt(MAX_VALIDITY_S)) {
+      return json(400, { status: 'rejected', reason: `authorization must expire within ${MAX_VALIDITY_S / 60} minutes` });
+    }
+
+    // Reject forgeries here instead of spending Circle quota on them
+    const valid = await verifyTypedData({
+      address: auth.from,
+      domain: USDC_DOMAIN,
+      types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+      primaryType: 'TransferWithAuthorization',
+      message: auth,
+      signature: signature as Hex,
+    });
+    if (!valid) return json(400, { status: 'rejected', reason: 'the signature does not match the sender' });
+
+    const times = (recent.get(auth.from) ?? []).filter((t) => Date.now() - t < RATE_WINDOW_MS);
+    if (times.length >= RATE_MAX) return json(429, { status: 'rejected', reason: 'Too many gasless sends — wait a minute.' });
+    recent.set(auth.from, [...times, Date.now()]);
+
+    const used = await publicClient
+      .readContract({ address: USDC, abi: authorizationStateAbi, functionName: 'authorizationState', args: [auth.from, auth.nonce] })
+      .catch(() => false);
+    // Already used means it already moved: let the client confirm it on-chain, never re-send
+    if (used) return json(200, { status: 'pending', reason: 'this authorization was already settled' });
+
+    try {
+      return json(200, await settle(auth, signature as Hex, new URL(request.url).origin));
+    } catch (err) {
+      console.error('[gasless] settle failed', err);
+      // Unknown outcome (timeout, network): the client watches the chain before saying anything moved
+      return json(502, { status: 'pending', reason: 'Circle did not answer cleanly' });
+    }
+  } catch (err) {
+    // Nothing was sent to Circle yet, so nothing can move
+    console.error('[gasless] bad request', err);
+    return json(400, { status: 'rejected', reason: 'bad request' });
+  }
+}
+
+async function settle(auth: Authorization, signature: Hex, origin: string): Promise<SettleResult> {
+  const api = env('CIRCLE_FACILITATOR_URL') || DEFAULT_API;
+  const value = auth.value.toString();
+  const requirements = {
+    scheme: 'exact',
+    network: NETWORK,
+    amount: value,
+    asset: USDC,
+    payTo: auth.to,
+    maxTimeoutSeconds: SETTLE_WAIT_S,
+    extra: { name: 'USDC', version: '2' },
+  };
+  const payload = {
+    x402Version: 2,
+    paymentPayload: {
+      x402Version: 2,
+      resource: { url: `${origin}/send`, description: 'Vlora USDC payment', mimeType: 'application/json' },
+      accepted: { ...requirements, extra: { ...requirements.extra, assetTransferMethod: 'eip3009' } },
+      payload: {
+        signature,
+        authorization: {
+          from: auth.from,
+          to: auth.to,
+          value,
+          validAfter: auth.validAfter.toString(),
+          validBefore: auth.validBefore.toString(),
+          nonce: auth.nonce,
+        },
+      },
+      // Derived from the EIP-3009 nonce, so a retry of the same signature converges on one payment
+      extensions: { 'payment-identifier': { info: { required: true, id: `vlora_${auth.nonce.slice(2, 42)}` } } },
+    },
+    paymentRequirements: requirements,
+  };
+
+  const res = await fetch(`${api}/v1/facilitator/x402/settle`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${env('CIRCLE_API_KEY')}` },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout((SETTLE_WAIT_S + 15) * 1000),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    success?: boolean;
+    transaction?: string;
+    errorReason?: string;
+    message?: string;
+    extensions?: { 'settlement-status'?: { status?: string; paymentId?: string } };
+  };
+
+  if (res.status !== 200) {
+    console.error(`[gasless] Circle ${res.status}: ${data.message ?? ''}`);
+    // 4xx is a rejected request ("carries no settlement outcome"); 5xx is unknown.
+    // 409 means this authorization is already bound to a payment, so it may still land.
+    if (res.status >= 500 || res.status === 409) return { status: 'pending', reason: `Circle error ${res.status}` };
+    return { status: 'rejected', reason: circleReason(res.status, data.message) };
+  }
+  if (data.success && data.transaction && isHex(data.transaction)) return { status: 'success', transaction: data.transaction };
+
+  const recorded = data.extensions?.['settlement-status'];
+  if (data.errorReason === 'settlement_pending' || recorded?.status === 'pending') {
+    const paymentId = recorded?.paymentId;
+    if (paymentId) {
+      const tx = await pollStatus(api, paymentId);
+      if (tx) return { status: 'success', transaction: tx };
+    }
+    return { status: 'pending', reason: 'Circle is still settling it' };
+  }
+  // A recorded payment that failed terminally, or a validation failure: nothing moved
+  return { status: 'rejected', reason: settleReason(data.errorReason) };
+}
+
+async function pollStatus(api: string, paymentId: string): Promise<Hex | null> {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setTimeout(r, 3_000));
+    try {
+      const res = await fetch(`${api}/v1/facilitator/x402/status/${encodeURIComponent(paymentId)}`, {
+        headers: { authorization: `Bearer ${env('CIRCLE_API_KEY')}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      const data = (await res.json()) as { status?: string; transaction?: string | null };
+      if (data.status === 'completed' && data.transaction && isHex(data.transaction)) return data.transaction;
+      if (data.status === 'failed') return null;
+    } catch {
+      // keep polling
+    }
+  }
+  return null;
+}
+
+function circleReason(status: number, message?: string): string {
+  if (status === 401) return 'Circle rejected the API key';
+  if (status === 403) return message ?? 'Circle refused this payment (below the minimum or not allowed)';
+  if (status === 429) return 'Circle rate limit — try again in a minute';
+  return message ?? `Circle rejected the request (${status})`;
+}
+
+function settleReason(code?: string): string {
+  switch (code) {
+    case 'insufficient_funds':
+      return 'not enough USDC';
+    case 'invalid_exact_evm_payload_signature':
+      return 'Circle could not verify the signature';
+    case 'invalid_exact_evm_payload_authorization_valid_before':
+      return 'the authorization expired';
+    case 'invalid_network':
+      return 'Circle does not support this network for your key';
+    case undefined:
+      return 'Circle could not settle it';
+    default:
+      return `Circle: ${code}`;
+  }
+}
