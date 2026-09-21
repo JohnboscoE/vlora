@@ -20,16 +20,13 @@ import {
   vaultAbi,
   type Token,
 } from './chain';
+import { limitProblem, parseTokenAmount, RecipientGuard, type VaultLimits } from './guards';
 
 // Cheapest current model: the agent only maps a request onto a few tools, and the
 // safety-critical checks are deterministic code + on-chain limits, not the model.
 const MODEL = 'claude-haiku-4-5';
 const MAX_ACTIONS_PER_MESSAGE = 5;
 
-// A helper, not inline maths: @vercel/nft mis-evaluates inline BigInt expressions
-function overBetaCap(perDay: bigint, decimals: number): boolean {
-  return BETA_MAX_PER_DAY != null && perDay > parseUnits(String(BETA_MAX_PER_DAY), decimals);
-}
 const erc20BalanceAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
 ] as const;
@@ -92,33 +89,23 @@ export async function runAgent(opts: {
   const { account, wallet } = agentClients(opts.agentKey);
   const actions: AgentAction[] = [];
 
-  // Recipients the owner actually typed — the only addresses a send may target
-  const allowedRecipients = new Set<string>((opts.message.match(/0x[a-fA-F0-9]{40}/g) ?? []).map((a) => a.toLowerCase()));
-  const typedNames = new Set((opts.message.match(/[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
+  // Recipients the owner typed in this message — the only addresses a send may target
+  const recipients = new RecipientGuard(opts.message);
 
-  const parseAmount = (raw: string, token: Token): bigint | string => {
-    const cleaned = raw.trim().replace(/,/g, '');
-    if (!new RegExp(`^\\d+(\\.\\d{1,${token.decimals}})?$`).test(cleaned)) return `"${raw}" is not a valid ${token.symbol} amount`;
-    const value = parseUnits(cleaned, token.decimals);
-    return value > 0n ? value : 'amount must be greater than 0';
-  };
+  const parseAmount = (raw: string, token: Token): bigint | string => parseTokenAmount(raw, token.decimals, token.symbol);
 
-  // Shared pre-flight: allowance left today and per-tx cap for this token
+  // Shared pre-flight: per-tx cap and 24-hour allowance for this token (server/guards.ts)
   const checkLimits = async (token: Token, amount: bigint): Promise<string | null> => {
-    const [remaining, limits, active] = await Promise.all([
+    const [remaining, limits, active, version] = await Promise.all([
       publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: 'remainingToday', args: [token.address] }),
       publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: 'limits', args: [token.address] }),
       publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: 'agentActive' }),
+      // v1 vaults have no version() and reset at midnight
+      publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: 'version' }).catch(() => 1n),
     ]);
-    if (!active) return 'the agent is paused, revoked or expired for this vault';
-    const [perTx, perDay] = limits;
-    if (perDay === 0n) return `${token.symbol} is not enabled for this agent wallet`;
-    if (overBetaCap(perDay, token.decimals)) {
-      return `this agent wallet's daily limit is above the mainnet beta cap of ${BETA_MAX_PER_DAY} ${token.symbol}; lower it to use the agent`;
-    }
-    if (amount > perTx) return `over the per-transaction limit of ${formatUnits(perTx, token.decimals)} ${token.symbol}`;
-    if (amount > remaining) return `over today's remaining allowance of ${formatUnits(remaining, token.decimals)} ${token.symbol}`;
-    return null;
+    const state: VaultLimits = { active, perTx: limits[0], perDay: limits[1], remaining };
+    if (version < 2n) state.legacyTwoDaySpent = await legacyTwoDaySpent(opts.vault, token.address);
+    return limitProblem(state, amount, token, BETA_MAX_PER_DAY);
   };
 
   const execute = async (
@@ -180,7 +167,7 @@ export async function runAgent(opts: {
       try {
         const addr = await publicClient.readContract({ address: ARC_NAMES, abi: arcNamesAbi, functionName: 'resolve', args: [label] });
         // Only names the owner typed become valid recipients (blocks injected names)
-        if (typedNames.has(label)) allowedRecipients.add(addr.toLowerCase());
+        recipients.allowResolvedName(label, addr);
         return `${label}.arc -> ${addr}`;
       } catch {
         return `ERROR: ${label}.arc is not registered or has expired`;
@@ -200,7 +187,7 @@ export async function runAgent(opts: {
       const token = tokenBySymbol(symbol);
       if (!token) return 'ERROR: unsupported token';
       if (!isAddress(to)) return 'ERROR: recipient must be a 0x address';
-      if (!allowedRecipients.has(to.toLowerCase())) {
+      if (!recipients.isAllowed(to)) {
         return 'ERROR: that recipient did not come from the owner\'s message. Ask the owner for the address or .arc name.';
       }
       const value = parseAmount(amount, token);
@@ -280,4 +267,14 @@ export async function runAgent(opts: {
     .join('\n')
     .trim();
   return { reply: reply || 'Done.', actions };
+}
+
+// v1 vaults: spentOnDay(today) + spentOnDay(yesterday); see VaultLimits.legacyTwoDaySpent
+async function legacyTwoDaySpent(vault: Address, token: Address): Promise<bigint> {
+  const today = BigInt(Math.floor(Date.now() / 86_400_000));
+  const [a, b] = await Promise.all([
+    publicClient.readContract({ address: vault, abi: vaultAbi, functionName: 'spentOnDay', args: [token, today] }),
+    publicClient.readContract({ address: vault, abi: vaultAbi, functionName: 'spentOnDay', args: [token, today - 1n] }),
+  ]);
+  return a + b;
 }

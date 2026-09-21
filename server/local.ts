@@ -1,7 +1,7 @@
 // Local agent server for development: `npm run agent`.
 // On Vercel the same handler runs as functions in /api/agent — this file isn't used there.
 import './loadEnv'; // must stay first: sets env before chain.ts picks the network
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { handleAgent, type AgentRoute } from './handler';
 import { handleGasless, type GaslessRoute } from './gasless';
 import { CHAIN_ID, NETWORK_NAME } from './chain';
@@ -19,7 +19,11 @@ async function toRequest(req: IncomingMessage): Promise<Request> {
   return new Request(`http://localhost:${PORT}${req.url ?? '/'}`, { method: req.method, headers, body });
 }
 
-createServer(async (req, res) => {
+createServer((req, res) => void route(req, res)).listen(PORT, () => {
+  console.log(`Vlora agent server on http://localhost:${PORT} — ${NETWORK_NAME} (chain ${CHAIN_ID}); the Vite dev server proxies /api/agent and /api/gasless here`);
+});
+
+async function route(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
   const agentRoute = url.pathname.match(/^\/api\/agent\/(\w+)$/)?.[1] as AgentRoute | undefined;
   const gaslessRoute = url.pathname.match(/^\/api\/gasless\/(\w+)$/)?.[1] as GaslessRoute | undefined;
@@ -31,6 +35,4 @@ createServer(async (req, res) => {
         : Response.json({ error: 'not found' }, { status: 404 });
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
-}).listen(PORT, () => {
-  console.log(`Vlora agent server on http://localhost:${PORT} — ${NETWORK_NAME} (chain ${CHAIN_ID}); the Vite dev server proxies /api/agent and /api/gasless here`);
-});
+}

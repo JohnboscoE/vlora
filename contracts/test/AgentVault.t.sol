@@ -109,6 +109,69 @@ contract AgentVaultTest is Test {
         assertEq(usdc.balanceOf(alice), 150e6);
     }
 
+    /// The v1 bug: calendar-day buckets let the agent spend 2x the cap across midnight
+    function test_NoMidnightReset_RollingWindow() public {
+        // 23:59 on some day
+        vm.warp((block.timestamp / 1 days + 1) * 1 days - 60);
+        vm.startPrank(agent);
+        vault.agentTransfer(usdc, alice, 50e6);
+        vault.agentTransfer(usdc, alice, 50e6);
+        uint256 capHitAt = block.timestamp;
+
+        // Two minutes later, after midnight: still blocked
+        vm.warp(capHitAt + 120);
+        vm.expectRevert(abi.encodeWithSelector(AgentVault.OverDailyLimit.selector, 101e6, 100e6));
+        vault.agentTransfer(usdc, alice, 1e6);
+        assertEq(vault.remainingToday(address(usdc)), 0);
+
+        // One second before the first spends are 24h old: still blocked
+        vm.warp(capHitAt + 1 days - 1);
+        vm.expectRevert(abi.encodeWithSelector(AgentVault.OverDailyLimit.selector, 101e6, 100e6));
+        vault.agentTransfer(usdc, alice, 1e6);
+
+        // Exactly 24h later they drop out of the window
+        vm.warp(capHitAt + 1 days);
+        assertEq(vault.remainingToday(address(usdc)), 100e6);
+        vault.agentTransfer(usdc, alice, 50e6);
+        vm.stopPrank();
+        assertEq(vault.spentInWindow(address(usdc)), 50e6);
+    }
+
+    function test_WindowReleasesSpendsOneByOne() public {
+        vm.startPrank(agent);
+        vault.agentTransfer(usdc, alice, 40e6);
+        uint256 first = block.timestamp;
+        vm.warp(first + 12 hours);
+        vault.agentTransfer(usdc, alice, 50e6);
+        assertEq(vault.remainingToday(address(usdc)), 10e6);
+
+        // First spend expires, second still counts
+        vm.warp(first + 1 days);
+        assertEq(vault.remainingToday(address(usdc)), 50e6);
+        vault.agentTransfer(usdc, alice, 50e6);
+        vm.expectRevert(abi.encodeWithSelector(AgentVault.OverDailyLimit.selector, 101e6, 100e6));
+        vault.agentTransfer(usdc, alice, 1e6);
+        vm.stopPrank();
+    }
+
+    function test_TooManySpendsInWindow_NeverForgetsALiveSpend() public {
+        uint256 max = vault.MAX_SPENDS_PER_WINDOW();
+        vm.startPrank(agent);
+        for (uint256 i; i < max; ++i) vault.agentTransfer(usdc, alice, 1e6);
+        vm.expectRevert(abi.encodeWithSelector(AgentVault.TooManySpendsInWindow.selector, max));
+        vault.agentTransfer(usdc, alice, 1e6);
+        assertEq(vault.spentInWindow(address(usdc)), max * 1e6);
+
+        vm.warp(block.timestamp + 1 days);
+        vault.agentTransfer(usdc, alice, 1e6);
+        vm.stopPrank();
+        assertEq(vault.spentInWindow(address(usdc)), 1e6);
+    }
+
+    function test_Version() public view {
+        assertEq(vault.version(), 2);
+    }
+
     function test_RevertsForTokenWithoutLimit() public {
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(AgentVault.TokenNotAllowed.selector, address(other)));

@@ -59,16 +59,15 @@ export async function resolveArcNamesInText(text: string): Promise<ArcResolution
  * stale reverse record on older ArcNames deployments.
  */
 export function useMyArcName(address: `0x${string}` | undefined, refreshKey = 0): string | null {
-  const [name, setName] = useState<string | null>(null);
+  // Tagged with the address it was looked up for, so a stale name never shows for a new wallet
+  const [found, setFound] = useState<{ address: string; name: string | null } | null>(null);
+  const contract = getArcNamesAddress(ACTIVE_CHAIN_ID);
 
   useEffect(() => {
-    const contract = getArcNamesAddress(ACTIVE_CHAIN_ID);
-    if (!address || !contract) {
-      setName(null);
-      return;
-    }
+    if (!address || !contract) return;
     let cancelled = false;
-    (async () => {
+    const setName = (name: string | null) => setFound({ address, name });
+    void (async () => {
       try {
         const label = await readContract(config, {
           address: contract,
@@ -90,7 +89,7 @@ export function useMyArcName(address: `0x${string}` | undefined, refreshKey = 0)
     return () => {
       cancelled = true;
     };
-  }, [address, refreshKey]);
+  }, [address, contract, refreshKey]);
 
-  return name;
+  return address && contract && found?.address === address ? found.name : null;
 }

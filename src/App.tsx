@@ -675,7 +675,7 @@ export default function App() {
   async function namesStillMatch(recipients: string[]): Promise<boolean> {
     const named = recipients.filter((r) => arcLabels[r.toLowerCase()]);
     for (const address of named) {
-      const label = arcLabels[address.toLowerCase()]!.replace(/\.arc$/, '');
+      const label = arcLabels[address.toLowerCase()].replace(/\.arc$/, '');
       const current = await resolveArcName(label);
       if (current?.toLowerCase() !== address.toLowerCase()) {
         addMessage(
@@ -1093,12 +1093,12 @@ export default function App() {
                 address: t.address,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
-                args: [address as `0x${string}`],
+                args: [address],
                 chainId: ACTIVE_CHAIN_ID,
               }),
             ),
           );
-          lines = tokens.map((t, i) => `${formatTokenAmount(Number(formatUnits(raw[i]!, t.decimals)), t.decimals)} ${t.symbol}`);
+          lines = tokens.map((t, i) => `${formatTokenAmount(Number(formatUnits(raw[i], t.decimals)), t.decimals)} ${t.symbol}`);
         } catch (err) {
           console.error('[vlora] balance read failed', err);
           await reply(agentMsg(`Couldn't read your balance from ${ACTIVE_CHAIN.name}. Please try again.`, 'error'));

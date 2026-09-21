@@ -27,10 +27,25 @@ interface ISwapRouter02 {
 ///         an optional recipient allowlist, and a pause switch. Swaps can only go
 ///         through the configured router and always pay out back into this vault.
 /// @dev The agent (an AI-driven backend) is treated as untrusted: if its key or its
-///      reasoning is compromised, the worst case is one day's allowance per token.
+///      reasoning is compromised, the worst case is `perDay` per token in ANY 24-hour
+///      period. The daily cap is a strict rolling window (not a calendar day), so there
+///      is no midnight reset to exploit. Swaps count their input toward the cap, so a
+///      bad swap price can't lose more than the capped input either.
 ///      The owner can withdraw everything, pause, or revoke the agent at any time.
 contract AgentVault is ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    /// v1 used calendar-day buckets (block.timestamp / 1 days); v2 is the rolling window
+    uint256 public constant VERSION = 2;
+    uint256 public constant WINDOW = 1 days;
+    /// Agent spends remembered per token. A spend that would evict one still inside the
+    /// window reverts instead, so the window sum is always exact.
+    uint256 public constant MAX_SPENDS_PER_WINDOW = 32;
+
+    struct Spend {
+        uint64 at;
+        uint192 amount;
+    }
 
     struct Limit {
         uint128 perTx;
@@ -45,7 +60,9 @@ contract AgentVault is ReentrancyGuard {
     bool public recipientAllowlistOnly;
 
     mapping(address token => Limit) public limits;
-    mapping(address token => mapping(uint256 day => uint256)) public spentOnDay;
+    /// Ring buffer of the most recent agent spends per token, oldest at _nextSpend[token]
+    mapping(address token => Spend[MAX_SPENDS_PER_WINDOW]) private _spends;
+    mapping(address token => uint256) private _nextSpend;
     mapping(address recipient => bool) public allowedRecipient;
 
     event AgentSet(address indexed agent, uint64 expiresAt);
@@ -67,6 +84,7 @@ contract AgentVault is ReentrancyGuard {
     error ZeroAddress();
     error NoMinimumOutput();
     error LengthMismatch();
+    error TooManySpendsInWindow(uint256 max);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -180,10 +198,21 @@ contract AgentVault is ReentrancyGuard {
 
     // ── Views ────────────────────────────────────────────────────────────────
 
+    /// What the agent can still spend of `token` right now: perDay minus everything it
+    /// spent in the last 24 hours. (Name kept from v1 for client compatibility.)
     function remainingToday(address token) external view returns (uint256) {
         uint256 cap = limits[token].perDay;
-        uint256 spent = spentOnDay[token][block.timestamp / 1 days];
+        uint256 spent = _spentInWindow(token);
         return spent >= cap ? 0 : cap - spent;
+    }
+
+    /// Total the agent spent of `token` in the last 24 hours
+    function spentInWindow(address token) external view returns (uint256) {
+        return _spentInWindow(token);
+    }
+
+    function version() external pure returns (uint256) {
+        return VERSION;
     }
 
     function agentActive() external view returns (bool) {
@@ -198,15 +227,35 @@ contract AgentVault is ReentrancyGuard {
         emit LimitSet(token, perTx, perDay);
     }
 
+    /// A spend at time `at` counts while block.timestamp < at + WINDOW. So for any two
+    /// spends less than 24h apart, the later one saw the earlier one: the sum over any
+    /// 24-hour period is at most perDay.
+    function _spentInWindow(address token) internal view returns (uint256 total) {
+        Spend[MAX_SPENDS_PER_WINDOW] storage spends = _spends[token];
+        for (uint256 i; i < MAX_SPENDS_PER_WINDOW; ++i) {
+            Spend memory e = spends[i];
+            if (e.amount != 0 && uint256(e.at) + WINDOW > block.timestamp) total += e.amount;
+        }
+    }
+
     function _spend(address token, uint256 amount) internal {
         Limit memory l = limits[token];
         if (l.perDay == 0) revert TokenNotAllowed(token);
         if (amount == 0) revert ZeroAmount();
         if (amount > l.perTx) revert OverPerTxLimit(amount, l.perTx);
-        uint256 day = block.timestamp / 1 days;
-        uint256 wouldSpend = spentOnDay[token][day] + amount;
+
+        uint256 slot = _nextSpend[token];
+        Spend memory oldest = _spends[token][slot];
+        // Never forget a spend that still counts
+        if (oldest.amount != 0 && uint256(oldest.at) + WINDOW > block.timestamp) {
+            revert TooManySpendsInWindow(MAX_SPENDS_PER_WINDOW);
+        }
+        uint256 wouldSpend = _spentInWindow(token) + amount;
         if (wouldSpend > l.perDay) revert OverDailyLimit(wouldSpend, l.perDay);
-        spentOnDay[token][day] = wouldSpend;
+
+        // amount <= perTx <= type(uint128).max, so it fits
+        _spends[token][slot] = Spend(uint64(block.timestamp), uint192(amount));
+        _nextSpend[token] = (slot + 1) % MAX_SPENDS_PER_WINDOW;
     }
 }
 
@@ -218,7 +267,10 @@ contract AgentVaultFactory {
 
     event VaultCreated(address indexed owner, address indexed vault, address indexed agent);
 
+    error ZeroRouter();
+
     constructor(address swapRouter_) {
+        if (swapRouter_ == address(0)) revert ZeroRouter();
         swapRouter = swapRouter_;
     }
 

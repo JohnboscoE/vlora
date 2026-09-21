@@ -16,7 +16,9 @@
     "contracts:build": "forge build",
     "contracts:test": "forge test",
     "agent": "tsx server/local.ts",
-    "build:agent-api": "node scripts/build-agent-api.mjs"
+    "build:agent-api": "node scripts/build-agent-api.mjs",
+    "test": "vitest run",
+    "test:contracts": "forge test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
@@ -58,6 +60,7 @@
     "tsx": "^4.23.13",
     "typescript": "~7.0.2",
     "vite": "^6.0.5",
-    "vite-plugin-node-polyfills": "^0.22.0"
+    "vite-plugin-node-polyfills": "^0.22.0",
+    "vitest": "^3.2.7"
   }
 }

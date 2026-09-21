@@ -64,7 +64,7 @@ function sessionAddress(secret, token) {
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { formatUnits, getAddress as getAddress2, isAddress as isAddress2, parseUnits } from "viem";
+import { formatUnits as formatUnits2, getAddress as getAddress2, isAddress as isAddress2 } from "viem";
 
 // server/chain.ts
 import { createPublicClient, createWalletClient, defineChain, fallback, http } from "viem";
@@ -145,6 +145,19 @@ var vaultAbi = [
   { type: "function", name: "agentActive", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
   { type: "function", name: "agentExpiresAt", stateMutability: "view", inputs: [], outputs: [{ type: "uint64" }] },
   { type: "function", name: "remainingToday", stateMutability: "view", inputs: [{ name: "token", type: "address" }], outputs: [{ type: "uint256" }] },
+  // v2 only (rolling 24h window); v1 vaults revert
+  { type: "function", name: "version", stateMutability: "pure", inputs: [], outputs: [{ type: "uint256" }] },
+  // v1 only (calendar-day buckets)
+  {
+    type: "function",
+    name: "spentOnDay",
+    stateMutability: "view",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "day", type: "uint256" }
+    ],
+    outputs: [{ type: "uint256" }]
+  },
   {
     type: "function",
     name: "limits",
@@ -210,12 +223,54 @@ var arcNamesAbi = [
   { type: "function", name: "resolve", stateMutability: "view", inputs: [{ name: "name", type: "string" }], outputs: [{ type: "address" }] }
 ];
 
+// server/guards.ts
+import { formatUnits, parseUnits } from "viem";
+var RecipientGuard = class {
+  addresses;
+  names;
+  constructor(ownerMessage) {
+    this.addresses = new Set((ownerMessage.match(/\b0x[a-fA-F0-9]{40}\b/g) ?? []).map((a) => a.toLowerCase()));
+    this.names = new Set((ownerMessage.match(/\b[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
+  }
+  /** Whether the owner typed this .arc name (label without ".arc") */
+  typedName(label) {
+    return this.names.has(label.toLowerCase());
+  }
+  /** Record what a typed name resolved to on-chain; names the owner didn't type are ignored */
+  allowResolvedName(label, address) {
+    if (!this.typedName(label)) return false;
+    this.addresses.add(address.toLowerCase());
+    return true;
+  }
+  isAllowed(address) {
+    return this.addresses.has(address.toLowerCase());
+  }
+};
+function parseTokenAmount(raw, decimals, symbol) {
+  const cleaned = raw.trim().replace(/,/g, "");
+  if (!new RegExp(`^\\d+(\\.\\d{1,${decimals}})?$`).test(cleaned)) return `"${raw}" is not a valid ${symbol} amount`;
+  const value = parseUnits(cleaned, decimals);
+  return value > 0n ? value : "amount must be greater than 0";
+}
+function limitProblem(limits, amount, token, betaMaxPerDay) {
+  const fmt = (v) => `${formatUnits(v, token.decimals)} ${token.symbol}`;
+  if (!limits.active) return "the agent is paused, revoked or expired for this vault";
+  if (limits.perDay === 0n) return `${token.symbol} is not enabled for this agent wallet`;
+  if (betaMaxPerDay != null && limits.perDay > parseUnits(String(betaMaxPerDay), token.decimals)) {
+    return `this agent wallet's daily limit is above the mainnet beta cap of ${betaMaxPerDay} ${token.symbol}; lower it to use the agent`;
+  }
+  if (amount > limits.perTx) return `over the per-transaction limit of ${fmt(limits.perTx)}`;
+  if (amount > limits.remaining) return `over the remaining 24-hour allowance of ${fmt(limits.remaining)}`;
+  if (limits.legacyTwoDaySpent != null && limits.legacyTwoDaySpent + amount > limits.perDay) {
+    const left = limits.perDay > limits.legacyTwoDaySpent ? limits.perDay - limits.legacyTwoDaySpent : 0n;
+    return `over the remaining 24-hour allowance of ${fmt(left)} (older agent wallet: create a new one for the on-chain rolling limit)`;
+  }
+  return null;
+}
+
 // server/agent.ts
 var MODEL = "claude-haiku-4-5";
 var MAX_ACTIONS_PER_MESSAGE = 5;
-function overBetaCap(perDay, decimals) {
-  return BETA_MAX_PER_DAY != null && perDay > parseUnits(String(BETA_MAX_PER_DAY), decimals);
-}
 var erc20BalanceAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }
 ];
@@ -242,29 +297,19 @@ async function runAgent(opts) {
   const client = new Anthropic({ apiKey: opts.apiKey });
   const { account, wallet } = agentClients(opts.agentKey);
   const actions = [];
-  const allowedRecipients = new Set((opts.message.match(/0x[a-fA-F0-9]{40}/g) ?? []).map((a) => a.toLowerCase()));
-  const typedNames = new Set((opts.message.match(/[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
-  const parseAmount = (raw, token) => {
-    const cleaned = raw.trim().replace(/,/g, "");
-    if (!new RegExp(`^\\d+(\\.\\d{1,${token.decimals}})?$`).test(cleaned)) return `"${raw}" is not a valid ${token.symbol} amount`;
-    const value = parseUnits(cleaned, token.decimals);
-    return value > 0n ? value : "amount must be greater than 0";
-  };
+  const recipients = new RecipientGuard(opts.message);
+  const parseAmount = (raw, token) => parseTokenAmount(raw, token.decimals, token.symbol);
   const checkLimits = async (token, amount) => {
-    const [remaining, limits, active] = await Promise.all([
+    const [remaining, limits, active, version] = await Promise.all([
       publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "remainingToday", args: [token.address] }),
       publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "limits", args: [token.address] }),
-      publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "agentActive" })
+      publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "agentActive" }),
+      // v1 vaults have no version() and reset at midnight
+      publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "version" }).catch(() => 1n)
     ]);
-    if (!active) return "the agent is paused, revoked or expired for this vault";
-    const [perTx, perDay] = limits;
-    if (perDay === 0n) return `${token.symbol} is not enabled for this agent wallet`;
-    if (overBetaCap(perDay, token.decimals)) {
-      return `this agent wallet's daily limit is above the mainnet beta cap of ${BETA_MAX_PER_DAY} ${token.symbol}; lower it to use the agent`;
-    }
-    if (amount > perTx) return `over the per-transaction limit of ${formatUnits(perTx, token.decimals)} ${token.symbol}`;
-    if (amount > remaining) return `over today's remaining allowance of ${formatUnits(remaining, token.decimals)} ${token.symbol}`;
-    return null;
+    const state = { active, perTx: limits[0], perDay: limits[1], remaining };
+    if (version < 2n) state.legacyTwoDaySpent = await legacyTwoDaySpent(opts.vault, token.address);
+    return limitProblem(state, amount, token, BETA_MAX_PER_DAY);
   };
   const execute = async (kind, summary, request) => {
     if (actions.length >= MAX_ACTIONS_PER_MESSAGE) return `ERROR: at most ${MAX_ACTIONS_PER_MESSAGE} actions per message`;
@@ -297,9 +342,9 @@ async function runAgent(opts) {
           ]);
           return {
             token: t.symbol,
-            balance: formatUnits(bal, t.decimals),
-            perTransactionLimit: formatUnits(limits[0], t.decimals),
-            remainingToday: formatUnits(remaining, t.decimals)
+            balance: formatUnits2(bal, t.decimals),
+            perTransactionLimit: formatUnits2(limits[0], t.decimals),
+            remainingToday: formatUnits2(remaining, t.decimals)
           };
         })
       );
@@ -316,7 +361,7 @@ async function runAgent(opts) {
       if (!/^[a-z0-9-]{3,32}$/.test(label)) return "ERROR: not a valid .arc name";
       try {
         const addr = await publicClient.readContract({ address: ARC_NAMES, abi: arcNamesAbi, functionName: "resolve", args: [label] });
-        if (typedNames.has(label)) allowedRecipients.add(addr.toLowerCase());
+        recipients.allowResolvedName(label, addr);
         return `${label}.arc -> ${addr}`;
       } catch {
         return `ERROR: ${label}.arc is not registered or has expired`;
@@ -335,13 +380,13 @@ async function runAgent(opts) {
       const token = tokenBySymbol(symbol);
       if (!token) return "ERROR: unsupported token";
       if (!isAddress2(to)) return "ERROR: recipient must be a 0x address";
-      if (!allowedRecipients.has(to.toLowerCase())) {
+      if (!recipients.isAllowed(to)) {
         return "ERROR: that recipient did not come from the owner's message. Ask the owner for the address or .arc name.";
       }
       const value = parseAmount(amount, token);
       if (typeof value === "string") return `ERROR: ${value}`;
-      const limitProblem = await checkLimits(token, value);
-      if (limitProblem) return `ERROR: ${limitProblem}`;
+      const limitProblem2 = await checkLimits(token, value);
+      if (limitProblem2) return `ERROR: ${limitProblem2}`;
       const recipient = getAddress2(to);
       return execute("send", `Sent ${amount} ${token.symbol} to ${recipient}`, {
         address: opts.vault,
@@ -361,8 +406,8 @@ async function runAgent(opts) {
       if (!tokenIn || !tokenOut || tokenIn.symbol === tokenOut.symbol) return "ERROR: pick two different supported tokens";
       const value = parseAmount(amount_in, tokenIn);
       if (typeof value === "string") return `ERROR: ${value}`;
-      const limitProblem = await checkLimits(tokenIn, value);
-      if (limitProblem) return `ERROR: ${limitProblem}`;
+      const limitProblem2 = await checkLimits(tokenIn, value);
+      if (limitProblem2) return `ERROR: ${limitProblem2}`;
       let best = null;
       if (!SWAP) return "ERROR: swaps are not available on this network";
       for (const fee of SWAP.feeTiers) {
@@ -379,7 +424,7 @@ async function runAgent(opts) {
       }
       if (!best || best.out === 0n) return `ERROR: no ${SWAP.venue} pool can fill ${amount_in} ${tokenIn.symbol} right now`;
       const minOut = applySlippage(best.out, SWAP.slippageBps);
-      const outLabel = `${formatUnits(best.out, tokenOut.decimals)} ${tokenOut.symbol}`;
+      const outLabel = `${formatUnits2(best.out, tokenOut.decimals)} ${tokenOut.symbol}`;
       return execute("swap", `Swapped ${amount_in} ${tokenIn.symbol} for ~${outLabel}`, {
         address: opts.vault,
         abi: vaultAbi,
@@ -402,6 +447,14 @@ async function runAgent(opts) {
   }
   const reply = final.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   return { reply: reply || "Done.", actions };
+}
+async function legacyTwoDaySpent(vault, token) {
+  const today = BigInt(Math.floor(Date.now() / 864e5));
+  const [a, b] = await Promise.all([
+    publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "spentOnDay", args: [token, today] }),
+    publicClient.readContract({ address: vault, abi: vaultAbi, functionName: "spentOnDay", args: [token, today - 1n] })
+  ]);
+  return a + b;
 }
 
 // server/handler.ts
@@ -426,6 +479,9 @@ function getConfig() {
   };
 }
 var json = (status, body) => Response.json(body, { status });
+function str(v) {
+  return typeof v === "string" ? v : "";
+}
 var busy = /* @__PURE__ */ new Set();
 var recent = /* @__PURE__ */ new Map();
 var RATE_WINDOW_MS = 6e4;
@@ -454,9 +510,9 @@ async function handleAgent(route, request) {
       const body = await readBody(request);
       const token = await login(
         config.sessionSecret,
-        String(body.address ?? ""),
-        String(body.nonce ?? ""),
-        String(body.signature ?? "")
+        str(body.address),
+        str(body.nonce),
+        str(body.signature)
       );
       return token ? json(200, { token }) : json(401, { error: "Signature check failed." });
     }
@@ -474,11 +530,12 @@ async function handleChat(config, request) {
   const owner = sessionAddress(config.sessionSecret, token);
   if (!owner) return json(401, { error: "Sign in first." });
   const body = await readBody(request);
-  const vaultRaw = String(body.vault ?? "");
-  const message = String(body.message ?? "").trim().slice(0, 2e3);
-  const history = (Array.isArray(body.history) ? body.history : []).filter(
-    (t) => !!t && (t.role === "user" || t.role === "assistant") && typeof t.text === "string"
-  );
+  const vaultRaw = str(body.vault);
+  const message = str(body.message).trim().slice(0, 2e3);
+  const history = (Array.isArray(body.history) ? body.history : []).filter((t) => {
+    const turn = t;
+    return !!turn && (turn.role === "user" || turn.role === "assistant") && typeof turn.text === "string";
+  });
   if (!isAddress3(vaultRaw) || !message) return json(400, { error: "vault and message are required" });
   const vault = getAddress3(vaultRaw);
   const [vaultOwner, vaultAgent] = await Promise.all([

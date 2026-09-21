@@ -107,22 +107,25 @@ function configProblem() {
   return null;
 }
 var json = (status, body) => Response.json(body, { status });
+function str(v) {
+  return typeof v === "string" ? v : "";
+}
 var recent = /* @__PURE__ */ new Map();
 var RATE_WINDOW_MS = 6e4;
 var RATE_MAX = 5;
 function parseAuthorization(raw) {
   if (!raw || typeof raw !== "object") return "authorization is required";
   const a = raw;
-  const from = String(a.from ?? "");
-  const to = String(a.to ?? "");
-  const nonce = String(a.nonce ?? "");
+  const from = str(a.from);
+  const to = str(a.to);
+  const nonce = str(a.nonce);
   if (!isAddress(from) || !isAddress(to)) return "invalid address";
   if (!isHex(nonce) || nonce.length !== 66) return "invalid nonce";
   let value, validAfter, validBefore;
   try {
-    value = BigInt(String(a.value));
-    validAfter = BigInt(String(a.validAfter));
-    validBefore = BigInt(String(a.validBefore));
+    value = BigInt(str(a.value));
+    validAfter = BigInt(str(a.validAfter));
+    validBefore = BigInt(str(a.validBefore));
   } catch {
     return "invalid number";
   }
@@ -145,7 +148,7 @@ async function handleGasless(route, request) {
     if (text.length > 5e3) return json(413, { status: "rejected", reason: "body too large" });
     const body = text ? JSON.parse(text) : {};
     const auth = parseAuthorization(body.authorization);
-    const signature = String(body.signature ?? "");
+    const signature = str(body.signature);
     if (typeof auth === "string") return json(400, { status: "rejected", reason: auth });
     if (!isHex(signature)) return json(400, { status: "rejected", reason: "invalid signature" });
     const now = BigInt(Math.floor(Date.now() / 1e3));

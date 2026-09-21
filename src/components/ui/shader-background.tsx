@@ -341,7 +341,7 @@ export function ShaderBackground({ className }: { className?: string }) {
       gl.compileShader(s)
       return s
     }
-    const program = gl.createProgram()!
+    const program = gl.createProgram()
     const vertexShader = compile(gl.VERTEX_SHADER, VERT)
     const fragmentShader = compile(gl.FRAGMENT_SHADER, FRAG)
     gl.attachShader(program, vertexShader)

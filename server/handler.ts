@@ -43,6 +43,11 @@ function getConfig(): Config | string {
 
 const json = (status: number, body: unknown) => Response.json(body, { status });
 
+/** A string field from an untrusted JSON body; anything else counts as missing */
+function str(v: unknown): string {
+  return typeof v === 'string' ? v : '';
+}
+
 // Best-effort abuse limits. Per instance only: on Vercel each function instance
 // keeps its own counters. The vault's on-chain limits are the real safety net.
 const busy = new Set<string>();
@@ -78,9 +83,9 @@ export async function handleAgent(route: AgentRoute, request: Request): Promise<
       const body = await readBody(request);
       const token = await login(
         config.sessionSecret,
-        String(body.address ?? ''),
-        String(body.nonce ?? ''),
-        String(body.signature ?? '') as `0x${string}`,
+        str(body.address),
+        str(body.nonce),
+        str(body.signature) as `0x${string}`,
       );
       return token ? json(200, { token }) : json(401, { error: 'Signature check failed.' });
     }
@@ -102,11 +107,12 @@ async function handleChat(config: Config, request: Request): Promise<Response> {
   if (!owner) return json(401, { error: 'Sign in first.' });
 
   const body = await readBody(request);
-  const vaultRaw = String(body.vault ?? '');
-  const message = String(body.message ?? '').trim().slice(0, 2000);
-  const history = (Array.isArray(body.history) ? body.history : []).filter(
-    (t): t is ChatTurn => !!t && (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string',
-  );
+  const vaultRaw = str(body.vault);
+  const message = str(body.message).trim().slice(0, 2000);
+  const history = (Array.isArray(body.history) ? (body.history as unknown[]) : []).filter((t): t is ChatTurn => {
+    const turn = t as Partial<ChatTurn> | null;
+    return !!turn && (turn.role === 'user' || turn.role === 'assistant') && typeof turn.text === 'string';
+  });
   if (!isAddress(vaultRaw) || !message) return json(400, { error: 'vault and message are required' });
   const vault = getAddress(vaultRaw);
 

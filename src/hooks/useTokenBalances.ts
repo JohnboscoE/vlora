@@ -22,7 +22,7 @@ export function useTokenBalances(account: `0x${string}` | undefined) {
   const balances: TokenBalances = {};
   tokens.forEach((t, i) => {
     const r = data?.[i];
-    if (r?.status === 'success') balances[t.symbol] = r.result as bigint;
+    if (r?.status === 'success') balances[t.symbol] = r.result;
   });
   return { balances, refetch, isError };
 }

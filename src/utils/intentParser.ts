@@ -216,9 +216,9 @@ export function parseIntent(input: string): ParsedIntent {
 
   // ---- CONTACTS ----
   const saveAs = input.match(/^\s*(?:save|add)(?:\s+contact)?\s+(0x[a-fA-F0-9]{40})\s+as\s+@?([A-Za-z][\w-]*)\s*$/i);
-  if (saveAs) return { type: 'contact_add', address: saveAs[1]!, name: saveAs[2]! };
+  if (saveAs) return { type: 'contact_add', address: saveAs[1], name: saveAs[2] };
   const addNamed = input.match(/^\s*(?:save|add)(?:\s+contact)?\s+@?([A-Za-z][\w-]*)\s+(?:as\s+)?(0x[a-fA-F0-9]{40})\s*$/i);
-  if (addNamed) return { type: 'contact_add', name: addNamed[1]!, address: addNamed[2]! };
+  if (addNamed) return { type: 'contact_add', name: addNamed[1], address: addNamed[2] };
   if (/^(show |list |my )?(my )?contacts\??$/.test(lower) || /^address book$/.test(lower)) {
     return { type: 'contacts_list' };
   }
@@ -384,20 +384,20 @@ export function parseArcNameCommand(input: string): ArcNameIntent | null {
   const register =
     text.match(/^register\s+(?:the\s+name\s+)?@?([a-z0-9-]+)(?:\.arc)?\b/i) ??
     text.match(/^(?:claim|get|buy)\s+(?:the\s+name\s+)?@?([a-z0-9-]+)\.arc\b/i);
-  if (register) return { type: 'arcname', op: 'register', label: register[1]!.toLowerCase(), years };
+  if (register) return { type: 'arcname', op: 'register', label: register[1].toLowerCase(), years };
 
   const renew = text.match(/^(?:renew|extend)\s+@?([a-z0-9-]+)(?:\.arc)?\b/i);
-  if (renew) return { type: 'arcname', op: 'renew', label: renew[1]!.toLowerCase(), years };
+  if (renew) return { type: 'arcname', op: 'renew', label: renew[1].toLowerCase(), years };
 
   const primary =
     text.match(/^(?:set|make|use)\s+@?([a-z0-9-]+)\.arc\s+(?:as\s+)?(?:my\s+)?(?:primary|main|default)?\s*(?:name)?\s*$/i) ??
     text.match(/^set\s+(?:my\s+)?primary\s+name\s+(?:to\s+)?@?([a-z0-9-]+)(?:\.arc)?\s*$/i);
-  if (primary) return { type: 'arcname', op: 'primary', label: primary[1]!.toLowerCase(), years: 1 };
+  if (primary) return { type: 'arcname', op: 'primary', label: primary[1].toLowerCase(), years: 1 };
 
   const lookup =
     text.match(/^(?:who\s+is|whois|who\s+owns|resolve|look\s*up)\s+@?([a-z0-9-]+)\.arc\s*\??$/i) ??
     text.match(/^is\s+@?([a-z0-9-]+)\.arc\s+(?:available|taken|free|registered)\s*\??$/i);
-  if (lookup) return { type: 'arcname', op: 'lookup', label: lookup[1]!.toLowerCase(), years: 1 };
+  if (lookup) return { type: 'arcname', op: 'lookup', label: lookup[1].toLowerCase(), years: 1 };
 
   return null;
 }

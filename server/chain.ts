@@ -104,6 +104,19 @@ export const vaultAbi = [
   { type: 'function', name: 'agentActive', stateMutability: 'view', inputs: [], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'agentExpiresAt', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint64' }] },
   { type: 'function', name: 'remainingToday', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  // v2 only (rolling 24h window); v1 vaults revert
+  { type: 'function', name: 'version', stateMutability: 'pure', inputs: [], outputs: [{ type: 'uint256' }] },
+  // v1 only (calendar-day buckets)
+  {
+    type: 'function',
+    name: 'spentOnDay',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'day', type: 'uint256' },
+    ],
+    outputs: [{ type: 'uint256' }],
+  },
   {
     type: 'function',
     name: 'limits',

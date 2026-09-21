@@ -13,6 +13,7 @@ import {
   DEFAULT_PER_TX,
   getAgentFactory,
   getAgentTokens,
+  getLegacyAgentFactories,
 } from '@/agent-config';
 import { getAgentInfo } from '@/lib/agentApi';
 import { watchTx } from '@/lib/watchTx';
@@ -42,6 +43,12 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
   const [open, setOpen] = useState(!collapsible);
   const [agentAddress, setAgentAddress] = useState<`0x${string}` | null | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
+  // Re-evaluates expiry once a minute without calling Date.now() during render
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Create form
   const [perTx, setPerTx] = useState(DEFAULT_PER_TX);
@@ -63,7 +70,23 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
     chainId: ACTIVE_CHAIN_ID,
     query: { enabled: !!factory && !!address },
   });
-  const vault = vaults && vaults.length > 0 ? vaults[vaults.length - 1] : undefined;
+  // Older factories (v1 vaults) — so an owner can still see, drain and revoke an old vault
+  const legacyFactories = getLegacyAgentFactories(ACTIVE_CHAIN_ID);
+  const { data: legacyVaults } = useReadContracts({
+    contracts: legacyFactories.map((f) => ({
+      address: f,
+      abi: agentFactoryAbi,
+      functionName: 'vaultsOf' as const,
+      args: address ? ([address] as const) : undefined,
+      chainId: ACTIVE_CHAIN_ID,
+    })),
+    query: { enabled: !!address && legacyFactories.length > 0 },
+  });
+  const allLegacy = (legacyVaults ?? []).flatMap((r) => (r.status === 'success' ? (r.result) : []));
+  const latestLegacy = allLegacy[allLegacy.length - 1];
+  const [creatingNew, setCreatingNew] = useState(false);
+  const currentVault = vaults && vaults.length > 0 ? vaults[vaults.length - 1] : undefined;
+  const vault = currentVault ?? (creatingNew ? undefined : latestLegacy);
 
   // Mixed ABIs in one multicall; results are read back through the typed read() helper
   const { data: state, refetch: refetchState } = useReadContracts({
@@ -75,20 +98,26 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
           { address: vault, abi: agentVaultAbi, functionName: 'agent', chainId: ACTIVE_CHAIN_ID },
           ...tokens.map((t) => ({ address: t.address, abi: erc20Abi, functionName: 'balanceOf' as const, args: [vault] as const, chainId: ACTIVE_CHAIN_ID })),
           ...tokens.map((t) => ({ address: vault, abi: agentVaultAbi, functionName: 'remainingToday' as const, args: [t.address] as const, chainId: ACTIVE_CHAIN_ID })),
+          { address: vault, abi: agentVaultAbi, functionName: 'version', chainId: ACTIVE_CHAIN_ID },
         ]
       : []) as unknown as readonly ContractFunctionParameters[],
     query: { enabled: !!vault, refetchInterval: 15_000 },
   });
 
-  const read = <T,>(i: number) => (state?.[i]?.status === 'success' ? (state[i]!.result as T) : undefined);
+  const read = <T,>(i: number) => (state?.[i]?.status === 'success' ? (state[i].result as T) : undefined);
   const active = read<boolean>(0) ?? false;
   const paused = read<boolean>(1) ?? false;
   const expiresAt = Number(read<bigint>(2) ?? 0n);
   const currentAgent = read<string>(3);
   const revoked = currentAgent === '0x0000000000000000000000000000000000000000';
-  const expired = !revoked && expiresAt > 0 && expiresAt * 1000 < Date.now();
+  const expired = !revoked && expiresAt > 0 && expiresAt * 1000 < now;
   const balanceOf = (i: number) => read<bigint>(4 + i);
   const remainingOf = (i: number) => read<bigint>(4 + tokens.length + i);
+  // v1 vaults have no version(): the read fails once the multicall has answered
+  const versionResult = state?.[4 + tokens.length * 2];
+  // Only for vaults found through an older factory: until a v2 factory is configured,
+  // a new vault would be v1 too, so there's nothing better to suggest
+  const legacyVault = !currentVault && versionResult != null && versionResult.status !== 'success';
 
   useEffect(() => {
     onVaultChange(vault ? { vault, active } : null);
@@ -260,7 +289,7 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
               {balanceOf(i) != null ? Number(formatUnits(balanceOf(i)!, t.decimals)).toFixed(2) : '—'} {t.symbol}
             </span>
             <span className="text-xs text-muted">
-              {remainingOf(i) != null ? Number(formatUnits(remainingOf(i)!, t.decimals)).toFixed(2) : '—'} left today
+              {remainingOf(i) != null ? Number(formatUnits(remainingOf(i)!, t.decimals)).toFixed(2) : '—'} left (24h)
             </span>
           </li>
         ))}
@@ -271,6 +300,20 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
         </p>
       )}
 
+      {legacyVault && (
+        <div className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
+          This agent wallet uses the first contract version, whose daily limit resets at midnight on-chain (the agent server still
+          holds it to a rolling 24 hours). For the on-chain rolling limit: <strong>Withdraw all</strong>, <strong>Revoke</strong>, then{' '}
+          {getAgentFactory(ACTIVE_CHAIN_ID) ? (
+            <button type="button" onClick={() => setCreatingNew(true)} className="font-semibold text-brand underline">
+              create a new agent wallet
+            </button>
+          ) : (
+            'create a new agent wallet'
+          )}
+          .
+        </div>
+      )}
       {agentAddress === null && (
         <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
           The agent server isn't reachable, so the agent can't act and Extend / Re-enable are unavailable. Locally, run{' '}

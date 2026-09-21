@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  app:
+    name: App — typecheck, lint, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # .npmrc sets legacy-peer-deps
+      - run: npm ci
+      - name: Typecheck (app + server)
+        run: npx tsc --noEmit && npx tsc --noEmit -p server
+      - name: Lint (type-aware)
+        run: npx oxlint --type-aware src server
+      - name: Unit tests (validation, parser, agent guards)
+        run: npx vitest run
+      - name: Build (web app + serverless bundles)
+        run: npm run build
+
+  contracts:
+    name: Contracts — Foundry unit, fuzz and invariant tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # OpenZeppelin is resolved from node_modules (remappings.txt)
+      - run: npm ci
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge --version
+      - run: forge test -vv

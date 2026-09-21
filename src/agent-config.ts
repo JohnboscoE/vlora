@@ -13,8 +13,20 @@ const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
   [ARC_MAINNET_ID]: '0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69',
 };
 
+/**
+ * Factories that deployed v1 vaults (calendar-day limit, reset at midnight). When a
+ * v2 factory replaces one, move its address here so owners can still find, withdraw
+ * from and revoke their old vault. The agent server holds v1 vaults to the rolling
+ * limit itself (server/guards.ts).
+ */
+const LEGACY_AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`[]>> = {};
+
 export function getAgentFactory(chainId: number): `0x${string}` | undefined {
   return AGENT_VAULT_FACTORIES[chainId];
+}
+
+export function getLegacyAgentFactories(chainId: number): `0x${string}`[] {
+  return LEGACY_AGENT_VAULT_FACTORIES[chainId] ?? [];
 }
 
 /** Tokens an agent wallet holds and has limits for. Mainnet: USDC only (the server's tools match). */
@@ -60,6 +72,8 @@ export const agentVaultAbi = [
   { type: 'function', name: 'agentActive', stateMutability: 'view', inputs: [], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'agentExpiresAt', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint64' }] },
   { type: 'function', name: 'paused', stateMutability: 'view', inputs: [], outputs: [{ type: 'bool' }] },
+  // v2 vaults only (rolling 24h window); a v1 vault reverts
+  { type: 'function', name: 'version', stateMutability: 'pure', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'remainingToday', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'setPaused', stateMutability: 'nonpayable', inputs: [{ name: 'paused_', type: 'bool' }], outputs: [] },
   { type: 'function', name: 'revokeAgent', stateMutability: 'nonpayable', inputs: [], outputs: [] },

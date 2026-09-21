@@ -6,7 +6,7 @@ const ARC_NAME_IN_TEXT_RE = /(?<![\w.@/-])([a-z0-9-]{3,32})\.arc(?![\w.-])/gi;
 /** Unique lowercase labels ("james" for "James.arc") in the order they appear */
 export function findArcNames(text: string): string[] {
   const seen = new Set<string>();
-  for (const m of text.matchAll(ARC_NAME_IN_TEXT_RE)) seen.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(ARC_NAME_IN_TEXT_RE)) seen.add(m[1].toLowerCase());
   return [...seen];
 }
 

@@ -22,20 +22,29 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
   const [open, setOpen] = useState(!collapsible);
   const [input, setInput] = useState('');
   const [years, setYears] = useState(1);
-  const [status, setStatus] = useState<Availability>('idle');
   const label = normalizeArcLabel(input);
   const yearlyFee = useArcNameFee();
+  const contract = getArcNamesAddress(ACTIVE_CHAIN_ID);
+  const checkable = !!label && ARC_NAME_LABEL_RE.test(label) && !!contract;
+
+  // Result of the last on-chain check, tagged with the label it was for
+  const [checked, setChecked] = useState<{ label: string; status: Availability } | null>(null);
+  const status: Availability = !label
+    ? 'idle'
+    : !ARC_NAME_LABEL_RE.test(label)
+      ? 'invalid'
+      : !contract
+        ? 'error'
+        : checked?.label === label
+          ? checked.status
+          : 'checking';
 
   // Debounced on-chain availability check
   useEffect(() => {
-    const contract = getArcNamesAddress(ACTIVE_CHAIN_ID);
-    if (!label) return setStatus('idle');
-    if (!ARC_NAME_LABEL_RE.test(label)) return setStatus('invalid');
-    if (!contract) return setStatus('error');
-
-    setStatus('checking');
+    if (!checkable || !contract) return;
     let cancelled = false;
-    const t = setTimeout(async () => {
+    const setStatus = (s: Availability) => setChecked({ label, status: s });
+    const check = async () => {
       try {
         const available = await readContract(config, {
           address: contract,
@@ -49,12 +58,13 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
         console.error('[vlora] name availability check failed', err);
         if (!cancelled) setStatus('error');
       }
-    }, 400);
+    };
+    const t = setTimeout(() => void check(), 400);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [label]);
+  }, [label, checkable, contract]);
 
   if (!open) {
     return (

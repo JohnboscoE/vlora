@@ -111,7 +111,7 @@ export function useTxPreview(tx: PlannedTx | null, account: `0x${string}` | unde
   const [preview, setPreview] = useState<TxPreview>({ status: 'idle' });
 
   // Stable dependency for the effect: bigint arrays don't compare by value
-  const key = tx && account ? JSON.stringify(tx, (_, v) => (typeof v === 'bigint' ? v.toString() : v)) + account : null;
+  const key = tx && account ? JSON.stringify(tx, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)) + account : null;
 
   useEffect(() => {
     if (!tx || !account) {
@@ -128,7 +128,7 @@ export function useTxPreview(tx: PlannedTx | null, account: `0x${string}` | unde
     let cancelled = false;
     setPreview({ status: 'checking' });
 
-    (async () => {
+    void (async () => {
       try {
         const gasPrice = await client.getGasPrice();
 

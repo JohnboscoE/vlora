@@ -63,6 +63,11 @@ function configProblem(): string | null {
 
 const json = (status: number, body: unknown) => Response.json(body, { status });
 
+/** A string field from an untrusted JSON body; anything else counts as missing */
+function str(v: unknown): string {
+  return typeof v === 'string' ? v : '';
+}
+
 // Best-effort, per instance (see handler.ts). Circle rate-limits and screens too.
 const recent = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
@@ -80,22 +85,22 @@ interface Authorization {
 function parseAuthorization(raw: unknown): Authorization | string {
   if (!raw || typeof raw !== 'object') return 'authorization is required';
   const a = raw as Record<string, unknown>;
-  const from = String(a.from ?? '');
-  const to = String(a.to ?? '');
-  const nonce = String(a.nonce ?? '');
+  const from = str(a.from);
+  const to = str(a.to);
+  const nonce = str(a.nonce);
   if (!isAddress(from) || !isAddress(to)) return 'invalid address';
   if (!isHex(nonce) || nonce.length !== 66) return 'invalid nonce';
   let value: bigint, validAfter: bigint, validBefore: bigint;
   try {
-    value = BigInt(String(a.value));
-    validAfter = BigInt(String(a.validAfter));
-    validBefore = BigInt(String(a.validBefore));
+    value = BigInt(str(a.value));
+    validAfter = BigInt(str(a.validAfter));
+    validBefore = BigInt(str(a.validBefore));
   } catch {
     return 'invalid number';
   }
   if (value <= 0n) return 'amount must be above 0';
   if (getAddress(from) === getAddress(to)) return 'sender and recipient are the same';
-  return { from: getAddress(from), to: getAddress(to), value, validAfter, validBefore, nonce: nonce as Hex };
+  return { from: getAddress(from), to: getAddress(to), value, validAfter, validBefore, nonce };
 }
 
 export type SettleResult =
@@ -122,7 +127,7 @@ export async function handleGasless(route: GaslessRoute, request: Request): Prom
     if (text.length > 5_000) return json(413, { status: 'rejected', reason: 'body too large' });
     const body = (text ? JSON.parse(text) : {}) as Record<string, unknown>;
     const auth = parseAuthorization(body.authorization);
-    const signature = String(body.signature ?? '');
+    const signature = str(body.signature);
     if (typeof auth === 'string') return json(400, { status: 'rejected', reason: auth });
     if (!isHex(signature)) return json(400, { status: 'rejected', reason: 'invalid signature' });
 
@@ -139,7 +144,7 @@ export async function handleGasless(route: GaslessRoute, request: Request): Prom
       types: TRANSFER_WITH_AUTHORIZATION_TYPES,
       primaryType: 'TransferWithAuthorization',
       message: auth,
-      signature: signature as Hex,
+      signature,
     });
     if (!valid) return json(400, { status: 'rejected', reason: 'the signature does not match the sender' });
 
@@ -154,7 +159,7 @@ export async function handleGasless(route: GaslessRoute, request: Request): Prom
     if (used) return json(200, { status: 'pending', reason: 'this authorization was already settled' });
 
     try {
-      return json(200, await settle(auth, signature as Hex, new URL(request.url).origin));
+      return json(200, await settle(auth, signature, new URL(request.url).origin));
     } catch (err) {
       console.error('[gasless] settle failed', err);
       // Unknown outcome (timeout, network): the client watches the chain before saying anything moved
