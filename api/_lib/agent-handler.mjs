@@ -87,7 +87,8 @@ var NETWORKS = {
       feeTiers: [100, 500, 3e3, 1e4],
       slippageBps: 50n
     },
-    arcNames: "0x578dbd5734f13bca66a1355cca296c07823892a2"
+    arcNames: "0x578dbd5734f13bca66a1355cca296c07823892a2",
+    betaMaxPerDay: null
   },
   mainnet: {
     chainId: 5042,
@@ -102,7 +103,10 @@ var NETWORKS = {
     tokens: [USDC],
     // No verified USDC/EURC pools on mainnet yet — the swap tool is off
     swap: null,
-    arcNames: "0xF2DCe7fe2864FDD899b12185c610C11d425200d9"
+    arcNames: "0xF2DCe7fe2864FDD899b12185c610C11d425200d9",
+    // Unaudited vault holding real money: refuse vaults whose daily limit is above this
+    // (whole tokens; same cap as BETA_MAX_PER_DAY in src/agent-config.ts)
+    betaMaxPerDay: 50
   }
 };
 var NET = IS_MAINNET ? NETWORKS.mainnet : NETWORKS.testnet;
@@ -112,6 +116,7 @@ var EXPLORER = NET.explorer;
 var TOKENS = NET.tokens;
 var SWAP = NET.swap;
 var ARC_NAMES = NET.arcNames;
+var BETA_MAX_PER_DAY = NET.betaMaxPerDay;
 function tokenBySymbol(symbol) {
   return TOKENS.find((t) => t.symbol === symbol.toUpperCase());
 }
@@ -208,6 +213,9 @@ var arcNamesAbi = [
 // server/agent.ts
 var MODEL = "claude-haiku-4-5";
 var MAX_ACTIONS_PER_MESSAGE = 5;
+function overBetaCap(perDay, decimals) {
+  return BETA_MAX_PER_DAY != null && perDay > parseUnits(String(BETA_MAX_PER_DAY), decimals);
+}
 var erc20BalanceAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }
 ];
@@ -251,6 +259,9 @@ async function runAgent(opts) {
     if (!active) return "the agent is paused, revoked or expired for this vault";
     const [perTx, perDay] = limits;
     if (perDay === 0n) return `${token.symbol} is not enabled for this agent wallet`;
+    if (overBetaCap(perDay, token.decimals)) {
+      return `this agent wallet's daily limit is above the mainnet beta cap of ${BETA_MAX_PER_DAY} ${token.symbol}; lower it to use the agent`;
+    }
     if (amount > perTx) return `over the per-transaction limit of ${formatUnits(perTx, token.decimals)} ${token.symbol}`;
     if (amount > remaining) return `over today's remaining allowance of ${formatUnits(remaining, token.decimals)} ${token.symbol}`;
     return null;

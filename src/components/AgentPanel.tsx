@@ -7,6 +7,7 @@ import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN } from '@/chain-env';
 import {
   agentFactoryAbi,
   agentVaultAbi,
+  BETA_MAX_PER_DAY,
   DEFAULT_EXPIRY_DAYS,
   DEFAULT_PER_DAY,
   DEFAULT_PER_TX,
@@ -151,7 +152,8 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
 
   // ── No vault yet: create one ──
   if (!vault) {
-    const canCreate = !!agentAddress && !!address && Number(perTx) > 0 && Number(perDay) >= Number(perTx);
+    const overCap = BETA_MAX_PER_DAY != null && Number(perDay) > BETA_MAX_PER_DAY;
+    const canCreate = !!agentAddress && !!address && Number(perTx) > 0 && Number(perDay) >= Number(perTx) && !overCap;
     return (
       <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
         {header}
@@ -182,6 +184,13 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
           </label>
         </div>
         <p className="mt-1.5 text-[11px] text-subtle">Applies to each token ({tokens.map((t) => t.symbol).join(', ')}), in whole tokens.</p>
+        {overCap && <p className="mt-1.5 text-[11px] text-danger">Beta cap: at most {BETA_MAX_PER_DAY} per day.</p>}
+        {BETA_MAX_PER_DAY != null && (
+          <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-[11px] leading-relaxed text-danger">
+            Beta, real money. The vault contract is unaudited and the agent key is run by this site's server. Your limits cap the
+            loss at one day's allowance (max {BETA_MAX_PER_DAY}), but only fund what you'd be fine losing.
+          </p>
+        )}
         <label className="mt-3 block text-xs text-muted">
           Agent access expires after
           <select

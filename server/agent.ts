@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { formatUnits, getAddress, isAddress, parseUnits, type Address } from 'viem';
 import {
   ARC_NAMES,
+  BETA_MAX_PER_DAY,
   EXPLORER,
   NETWORK_NAME,
   SWAP,
@@ -24,6 +25,11 @@ import {
 // safety-critical checks are deterministic code + on-chain limits, not the model.
 const MODEL = 'claude-haiku-4-5';
 const MAX_ACTIONS_PER_MESSAGE = 5;
+
+// A helper, not inline maths: @vercel/nft mis-evaluates inline BigInt expressions
+function overBetaCap(perDay: bigint, decimals: number): boolean {
+  return BETA_MAX_PER_DAY != null && perDay > parseUnits(String(BETA_MAX_PER_DAY), decimals);
+}
 const erc20BalanceAbi = [
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
 ] as const;
@@ -107,6 +113,9 @@ export async function runAgent(opts: {
     if (!active) return 'the agent is paused, revoked or expired for this vault';
     const [perTx, perDay] = limits;
     if (perDay === 0n) return `${token.symbol} is not enabled for this agent wallet`;
+    if (overBetaCap(perDay, token.decimals)) {
+      return `this agent wallet's daily limit is above the mainnet beta cap of ${BETA_MAX_PER_DAY} ${token.symbol}; lower it to use the agent`;
+    }
     if (amount > perTx) return `over the per-transaction limit of ${formatUnits(perTx, token.decimals)} ${token.symbol}`;
     if (amount > remaining) return `over today's remaining allowance of ${formatUnits(remaining, token.decimals)} ${token.symbol}`;
     return null;

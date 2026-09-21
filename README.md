@@ -2,20 +2,31 @@
   <img src="public/vlora-logo.svg" alt="Vlora" width="220" />
 </p>
 
-<p align="center"><strong>State the payment. Vlora settles it.</strong><br/>
+<p align="center"><strong>An AI agent that can spend your USDC — but provably can't drain it.</strong><br/>
 Plain-language payments on <a href="https://arc.io">Arc</a>, the stablecoin chain where USDC is the gas.</p>
 
-<p align="center"><a href="https://vlora-two.vercel.app"><strong>Live demo → vlora-two.vercel.app</strong></a> (Arc Testnet)</p>
+<p align="center"><a href="https://vlora-two.vercel.app"><strong>Live → vlora-two.vercel.app</strong></a> (Arc mainnet)</p>
 
 ---
 
-Vlora is a chat-style web app: you type (or say) what you want — `send 10 USDC to james.arc`, `swap 20 USDC for EURC`, `pay alice 5 and bob 7` — and Vlora turns it into a validated transaction on Arc. Every action is checked, simulated on-chain and shown for confirmation **before** your wallet signs anything.
+Vlora lets you tell an AI agent *"pay james.arc 3 USDC"* and have it happen without signing every transaction — from a sub-account whose limits are enforced by a smart contract, not by the AI's good behaviour. Everything else in the app is the same idea without the AI: you type what you want (`send 10 USDC to james.arc`, `pay alice 5 and bob 7`), and nothing is signed until it has been validated, simulated on-chain and shown to you.
 
-> **Honesty note.** In the main app, commands are understood with deterministic pattern matching (`src/utils/intentParser.ts`), not an LLM. The optional **agent wallet** (testnet beta) is the only part that uses an AI model (Claude), and it runs server-side under hard on-chain limits.
+## Why the agent can't drain you
+
+The model is treated as untrusted. Four independent layers sit between what it wants and what moves:
+
+1. **Recipients come from you, not the model.** The server only pays an address or `.arc` name that appears in *your* message. Text the model reads — a web page, a name record, a crafted reply — can't redirect funds (the main prompt-injection risk for payment agents).
+2. **Deterministic checks on the server.** Amount, per-transaction limit, today's remaining allowance, and a dry run of the exact call, before anything is sent. At most 5 actions per message.
+3. **On-chain caps in `AgentVault`.** Per-token per-transaction and per-day limits, expiry, pause and revoke — enforced by the contract even if the server and its key are fully compromised.
+4. **You stay the owner.** Withdraw, pause or revoke at any time from your own wallet; the agent key can never withdraw.
+
+**Worst case:** a compromised agent key or a manipulated model can move at most one day's allowance per token, to anywhere. On mainnet the defaults are 2 USDC per transaction / 5 per day, and the agent refuses any vault above a 50 USDC/day beta cap. See [Agent wallet](#agent-wallet-beta) for details.
+
+> **Honesty notes.** Only the agent uses an AI model (Claude Haiku 4.5, server-side). The main chat understands commands with deterministic pattern matching (`src/utils/intentParser.ts`), not an LLM. `AgentVault` is tested (Foundry) but **not audited**, and on the hosted site the agent key is operated by the site's server — which is exactly why the on-chain caps exist. Fund an agent wallet only with what you'd be fine losing.
 
 ## Status
 
-Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see [Going to mainnet](#going-to-mainnet)).
+Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (see [Mainnet](#mainnet)).
 
 | Feature | Arc Testnet | Arc mainnet |
 |---|---|---|
@@ -28,12 +39,11 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 | Swaps USDC ⇄ EURC ⇄ cirBTC | ✅ via Synthra | ✅ via LI.FI (the Arc Portal's swap aggregator) |
 | Batch payments (many recipients, one tx) | ✅ | ✅ |
 | Voice input (speech to text) | ✅ | ✅ |
-| Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only (no swaps yet) |
+| Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only, ≤ 50 USDC/day cap, unaudited |
 
 ## What it does
 
-- **Plain-language commands** — send, swap, batch, check balances, request money, manage names. Type `/` for a quick-action menu.
-- **Voice input** — tap the mic and say *"send 5 USDC to james dot arc"*. Speech becomes text in the input (browser Web Speech API: Chrome, Edge, Safari); nothing is sent until you review it and press Enter.
+- **Agent wallet (beta)** — type `/agent` and the AI acts from a sub-account you fund, within limits the contract enforces; `/exit` returns to normal mode. See [Why the agent can't drain you](#why-the-agent-cant-drain-you).
 - **Check before you sign** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
 - **Swaps** — testnet: best quote across Synthra fee tiers; mainnet: LI.FI, the aggregator behind the Arc Portal's swap page. Quotes refresh every 20s, with a 0.5% slippage guard and a re-quote just before signing. LI.FI returns a ready-made transaction, so Vlora decodes and checks it (pinned router, receiver = you, exact input, output token, on-chain minimum) before it can be signed.
@@ -42,7 +52,7 @@ Built and tested on **Arc Testnet**. Mainnet is configured but not yet live (see
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
 - **Payment links** — `request 25 USDC` gives a link that prefills a send for the payer, who still reviews and signs.
 - **Live progress** — every transaction shows sign → approve (if needed) → confirm, and always ends with success, a revert reason, "never broadcast", or an explorer link.
-- **Agent wallet (testnet beta)** — type `/agent` and the AI acts from a sub-account you fund, within limits you set; `/exit` returns to normal mode. See [below](#agent-wallet-testnet-beta).
+- **Also** — plain-language commands with a `/` quick-action menu, voice input (browser speech-to-text; nothing runs until you press Enter), and light/dark themes.
 
 ## Tech
 
@@ -65,8 +75,8 @@ contracts/
   BatchSender.sol        multi-recipient ERC-20 payouts (no owner, never holds funds)
   AgentVault.sol         agent wallet + factory
   test/                  Foundry tests
-server/                  agent API source (testnet beta) — handler shared by local + Vercel
-api/agent/               Vercel Functions (info, nonce, login, chat)
+server/                  agent + gasless API source — handlers shared by local + Vercel
+api/agent/ · api/gasless/   Vercel Functions
 api/_lib/                generated bundle of server/*.ts used by the functions
 scripts/build-agent-api.mjs   builds that bundle (runs in `npm run build`)
 ```
@@ -98,7 +108,7 @@ Import the repo in Vercel with these settings (Vite is detected automatically):
 | Output Directory | `dist` |
 | Install Command | default — the committed `.npmrc` handles a known peer-dependency conflict |
 
-The web app needs no environment variables. Every push to `main` redeploys. For the agent wallet, add its three environment variables (see [Agent wallet](#agent-wallet-testnet-beta)) and redeploy — Vercel only applies new variables to new deployments. If *Deployment Protection* is on, only people logged in to your Vercel team can open the site.
+The web app needs no environment variables. Every push to `main` redeploys. For the agent wallet, add its three environment variables (see [Agent wallet](#agent-wallet-beta)) and redeploy — Vercel only applies new variables to new deployments. If *Deployment Protection* is on, only people logged in to your Vercel team can open the site.
 
 ## Contracts
 
@@ -126,7 +136,7 @@ Deployed contracts (the same deployer made its first transactions on each chain,
 | `BatchSender` | No owner, not upgradeable, never holds funds; moves each amount straight from sender to recipient; atomic; ≤ 200 recipients. |
 | `AgentVault` | Owner-funded sub-account. The agent can only send or swap allowed tokens, within per-tx and per-day caps, before expiry, while not paused; swap output always returns to the vault; owner can withdraw, pause or revoke at any time. |
 
-## Agent wallet (testnet beta)
+## Agent wallet (beta)
 
 An optional sub-account the AI can spend from **without asking you to sign each time** — inside limits enforced by the `AgentVault` contract. You create it, fund only what you're comfortable with, and can pause, revoke or withdraw at any time.
 
@@ -142,7 +152,7 @@ The agent needs three secrets:
 | Variable | What it is |
 |---|---|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `AGENT_PRIVATE_KEY` | The agent's own key — `cast wallet new`. **Never your personal wallet's key**: the vault limits only restrain the agent, so if the agent key is also the owner, nothing is protected. Fund its address with a little test USDC for gas. |
+| `AGENT_PRIVATE_KEY` | The agent's own key — `cast wallet new`. **Never your personal wallet's key**: the vault limits only restrain the agent, so if the agent key is also the owner, nothing is protected. Fund its address with a little USDC for gas (test USDC on testnet, real USDC on mainnet — about 0.5 USDC lasts a long time). |
 | `SESSION_SECRET` | 32+ random characters that sign sign-in sessions: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 **Locally:** put them in `server/.env` (copy `server/.env.example`; the file is git-ignored), then
@@ -158,7 +168,7 @@ Sign-in sessions are stateless HMAC-signed tokens, so they work across serverles
 
 Then in the app:
 
-1. **Agent wallet** panel → set limits (default 10 per transaction, 25 per day) → **Create agent wallet** → **Add** a few USDC.
+1. **Agent wallet** panel → set limits (defaults: 10 per transaction / 25 per day on testnet; 2 / 5 on mainnet, where the daily limit is capped at 50) → **Create agent wallet** → **Add** a few USDC.
 2. Type **`/agent`** (or flip the **Agent** switch in the chat header). The first agent message asks your wallet for a free sign-in signature.
 3. Try `what's in my agent wallet?`, `send 1 USDC to 0x…`, `swap 2 USDC for EURC` — they execute without wallet pop-ups, within your limits.
 4. Type **`/exit`** to return to normal mode, where every transaction asks your wallet to sign.
@@ -182,7 +192,9 @@ Set it in `server/.env` (local, with `npm run agent`) or in Vercel's environment
 
 The network is chosen at build time by `VITE_ARC_NETWORK`: set it to `mainnet` in Vercel's environment variables for the production site; leave it unset locally to develop on Arc Testnet. Every chain id, RPC (with fallbacks), explorer, contract address and landing-page feature list follows from it.
 
-Live on mainnet: USDC, EURC and cirBTC sends, balances, contacts, payment links, voice input, batch payments, `.arc` names and swaps through LI.FI (`/lifi/*` is proxied to `li.quest/v1` like the RPC). The agent wallet on mainnet holds and sends USDC only (no swaps yet). The agent server follows the same `VITE_ARC_NETWORK` variable, so it always runs on the network the site shows.
+Live on mainnet: USDC, EURC and cirBTC sends, balances, contacts, payment links, voice input, batch payments, `.arc` names and swaps through LI.FI (`/lifi/*` is proxied to `li.quest/v1` like the RPC). The agent wallet on mainnet holds and sends USDC only (no swaps yet), with the 50 USDC/day beta cap.
+
+Contract addresses repeat across the two networks with different contracts behind them, so no address is shared between chains in code: every config (`src/batch-config.ts`, `src/arcnames-config.ts`, `src/agent-config.ts`, `src/swap-config.ts`, `src/tokens.ts`, `server/chain.ts`) is a map keyed by chain id, and the one switch is `IS_MAINNET` in `src/chain-env.ts` (server: `VITE_ARC_NETWORK`). Wallets are also asked to be on that chain before anything is signed. The agent server follows the same `VITE_ARC_NETWORK` variable, so it always runs on the network the site shows.
 
 ## Troubleshooting
 
@@ -198,6 +210,7 @@ Live on mainnet: USDC, EURC and cirBTC sends, balances, contacts, payment links,
 ## Security notes
 
 - Nothing is signed without a preview; the preview is blocked if validation, the dry run, or the chain read fails.
+- `AgentVault` is unaudited. On mainnet, the panel won't create a vault above 50 USDC/day and the agent server refuses to act for one.
 - Keys and API keys live only in git-ignored `.env` files or Vercel environment variables. Never commit them, and never use a personal wallet's key as the agent key.
 - Voice input uses the browser's speech recognition; Chrome and Edge send audio to their servers for transcription. Nothing is executed until you press Enter.
 - Token addresses are pinned in `src/tokens.ts`; same-named copies exist on testnet, so tokens are added only after verifying real liquidity.

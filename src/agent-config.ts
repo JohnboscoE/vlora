@@ -2,7 +2,7 @@
  * Agent wallets (contracts/AgentVault.sol). A chain with no factory address has
  * the agent turned off. Beta on both networks (mainnet: USDC sends only).
  */
-import { ARC_MAINNET_ID, ARC_TESTNET_ID } from './chain-env';
+import { ARC_MAINNET_ID, ARC_TESTNET_ID, IS_MAINNET } from './chain-env';
 import { getTokens, type TokenInfo } from './tokens';
 
 const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
@@ -26,10 +26,17 @@ export function getAgentTokens(chainId: number): TokenInfo[] {
 /** Proxied to the agent server by vite.config.ts */
 export const AGENT_API = '/api/agent';
 
-// Conservative defaults for a new agent wallet, in whole tokens
-export const DEFAULT_PER_TX = '10';
-export const DEFAULT_PER_DAY = '25';
+// Conservative defaults for a new agent wallet, in whole tokens. Lower on mainnet,
+// where the vault holds real money and the contract is unaudited.
+export const DEFAULT_PER_TX = IS_MAINNET ? '2' : '10';
+export const DEFAULT_PER_DAY = IS_MAINNET ? '5' : '25';
 export const DEFAULT_EXPIRY_DAYS = 7;
+
+/**
+ * Mainnet beta cap on the daily limit, in whole tokens. The panel won't create a
+ * vault above it and the agent server refuses to act for one (server/agent.ts).
+ */
+export const BETA_MAX_PER_DAY: number | null = IS_MAINNET ? 50 : null;
 
 export const agentFactoryAbi = [
   {

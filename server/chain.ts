@@ -40,6 +40,7 @@ const NETWORKS = {
       slippageBps: 50n,
     } as SwapVenue | null,
     arcNames: '0x578dbd5734f13bca66a1355cca296c07823892a2' as Address,
+    betaMaxPerDay: null as number | null,
   },
   mainnet: {
     chainId: 5042,
@@ -55,6 +56,9 @@ const NETWORKS = {
     // No verified USDC/EURC pools on mainnet yet — the swap tool is off
     swap: null as SwapVenue | null,
     arcNames: '0xF2DCe7fe2864FDD899b12185c610C11d425200d9' as Address,
+    // Unaudited vault holding real money: refuse vaults whose daily limit is above this
+    // (whole tokens; same cap as BETA_MAX_PER_DAY in src/agent-config.ts)
+    betaMaxPerDay: 50 as number | null,
   },
 } as const;
 
@@ -66,6 +70,7 @@ export const EXPLORER = NET.explorer;
 export const TOKENS: Token[] = NET.tokens;
 export const SWAP: SwapVenue | null = NET.swap;
 export const ARC_NAMES: Address = NET.arcNames;
+export const BETA_MAX_PER_DAY: number | null = NET.betaMaxPerDay;
 
 export function tokenBySymbol(symbol: string): Token | undefined {
   return TOKENS.find((t) => t.symbol === symbol.toUpperCase());
