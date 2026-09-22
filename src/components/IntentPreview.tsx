@@ -32,6 +32,7 @@ import { ARC_NAME_MAX_YEARS } from '@/arcnames-config';
 import { useTxPreview, type PlannedTx, type TxPreview } from '@/hooks/useTxPreview';
 import { contactName, type Contact } from '@/lib/contacts';
 import { cn } from '@/lib/utils';
+import { SlideToConfirm } from './SlideToConfirm';
 
 function formatAddr(addr: string) {
   if (!addr || addr.length < 10) return addr;
@@ -162,6 +163,24 @@ export function IntentPreview({
     sim.status === 'unknown' || // fail closed: never sign something we couldn't check
     (swapCheck != null && quote.status !== 'ok');
 
+  const confirm = () => onConfirm({ quote: quote.status === 'ok' ? quote.quote : undefined, gasless });
+  const readyToSign = !previewOnly && isConnected && !busy && !confirmDisabled && sim.status === 'ok';
+  // What the transaction does, e.g. "Send 5 USDC" (slider label)
+  const actionLabel =
+    intent.type === 'swap' && swapCheck && quote.status === 'ok'
+      ? `Swap ${intent.amountIn} ${swapCheck.tokenIn.symbol} → ${fmt(quote.quote.amountOut, swapCheck.tokenOut.decimals)} ${swapCheck.tokenOut.symbol}`
+      : intent.type === 'send'
+        ? `Send ${intent.amount} ${intent.token}`
+        : intent.type === 'batch'
+          ? sendCheck?.ok && 'total' in sendCheck
+            ? `Send ${sendCheck.total.toFixed(2)} USDC to ${intent.items.length}`
+            : `Send to ${intent.items.length} recipients`
+          : intent.type === 'arcname'
+            ? intent.op === 'primary'
+              ? `Set ${intent.label}.arc as my name`
+              : `${intent.op === 'register' ? 'Register' : 'Renew'} ${intent.label}.arc`
+            : 'Confirm';
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-6"
@@ -258,10 +277,13 @@ export function IntentPreview({
             >
               Switch to {ACTIVE_CHAIN.name}
             </button>
+          ) : readyToSign ? (
+            // Everything checked: a deliberate slide, so a stray tap can't send money
+            <SlideToConfirm label={`Slide to ${actionLabel.charAt(0).toLowerCase()}${actionLabel.slice(1)}`} onConfirm={confirm} />
           ) : (
             <button
               disabled={confirmDisabled}
-              onClick={() => onConfirm({ quote: quote.status === 'ok' ? quote.quote : undefined, gasless })}
+              onClick={confirm}
               className="mt-2 w-full rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {previewOnly ? (

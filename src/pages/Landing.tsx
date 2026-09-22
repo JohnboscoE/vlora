@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, Check, Clock, MessageSquareText, ShieldCheck, PenLine, Zap, CircleDollarSign, Gauge } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Check, Clock, MessageSquareText, ShieldCheck, PenLine, Zap, CircleDollarSign, Gauge, Plus } from 'lucide-react';
 import { ShaderBackground } from '@/components/ui/shader-background';
 import { TxDemo } from '@/components/TxDemo';
 import { ACTIVE_CHAIN } from '@/chain-env';
@@ -51,10 +51,60 @@ const TODAY = [
   'Payment request links',
   ...(batchLive ? ['Batch payments: many recipients, one transaction'] : []),
   ...(swapsLive ? [`Swap ${tokenSymbols.join(', ')} at live quotes`] : []),
-  'Speak your command instead of typing it',
   ...(agentLive ? ['Agent wallet (beta): the AI pays within limits you set'] : []),
   'Every transaction simulated and confirmed before you sign',
 ];
+// What Vlora is built with (tools and networks, not partnerships)
+const BUILT_WITH = ['Arc', 'Circle USDC', 'EURC', 'LI.FI', 'ArcNames', 'Claude', 'Foundry', 'Sourcify'];
+
+const AGENT_LAYERS = [
+  {
+    title: 'Recipients come from you',
+    meta: 'Prompt-injection guard',
+    body: 'The agent can only pay an address or .arc name you typed in that message. Text it reads elsewhere can’t redirect funds.',
+  },
+  {
+    title: 'Checked on the server',
+    meta: 'Deterministic',
+    body: 'Amount, per-transaction limit, 24-hour allowance and a dry run of the exact call — before anything is sent.',
+  },
+  {
+    title: 'Capped on-chain',
+    meta: 'Rolling 24-hour limit',
+    body: 'The AgentVault contract enforces your limits even if the server or its key is compromised. No midnight reset.',
+  },
+  {
+    title: 'You stay the owner',
+    meta: 'Withdraw · pause · revoke',
+    body: 'Only your wallet can withdraw, change limits or switch the agent off. The agent key never can.',
+  },
+];
+
+const FAQ = [
+  {
+    q: 'Does Vlora hold my money?',
+    a: 'No. Every normal transaction is signed in your own wallet. An agent wallet is a smart contract you own; only you can withdraw from it.',
+  },
+  {
+    q: 'Is the chat an AI?',
+    a: 'The main chat isn’t: it understands commands with deterministic pattern matching, so what you type is what gets previewed. Only agent mode uses an AI model (Claude), inside the limits above.',
+  },
+  {
+    q: 'What does it cost?',
+    a: 'Arc’s network fee, paid in USDC — around a cent per transfer. Swaps include LI.FI’s fee (about 0.25%), shown before you sign.',
+  },
+  {
+    q: 'What happens if something goes wrong with the agent?',
+    a: 'At worst it can move your daily limit in any 24 hours, to anywhere, until you pause or revoke it. It can never withdraw your balance. Keep the limit to what you’d be fine losing.',
+  },
+  {
+    q: 'Is it audited?',
+    a: 'Not yet. The contracts are open source, verified, and covered by unit, fuzz and invariant tests; the threat model lists what’s trusted and the worst case for each part.',
+  },
+];
+
+const THREAT_MODEL_URL = 'https://github.com/JohnboscoE/vlora/blob/main/SECURITY.md';
+
 const NEXT = [
   ...(!namesLive ? ['.arc names on this network'] : []),
   ...(!batchLive ? ['Batch payments'] : []),
@@ -166,6 +216,89 @@ function HowItWorks() {
   );
 }
 
+function BuiltWith() {
+  return (
+    <div className="border-b border-line/10 bg-surface py-4" aria-label="Built with">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-6 px-5 md:px-8">
+        <p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-subtle">Built with</p>
+        <div className="relative min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)]">
+          <div className="vlora-rail flex w-max items-center gap-8">
+            {[...BUILT_WITH, ...BUILT_WITH].map((name, i) => (
+              <span
+                key={`${name}-${i}`}
+                aria-hidden={i >= BUILT_WITH.length}
+                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted"
+              >
+                <span className="size-1.5 rounded-full bg-gradient-to-r from-brand to-brand-2" />
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentSafety() {
+  return (
+    <section className="mx-auto w-full max-w-6xl px-5 py-20 md:px-8 md:py-28">
+      <div className="grid gap-10 md:grid-cols-[0.8fr_1.2fr] md:items-center">
+        <div>
+          <SectionHeading eyebrow="Agent wallet · beta" title="An agent that can spend, but can’t drain you." />
+          <p className="mt-4 max-w-md text-sm leading-relaxed text-muted">
+            Type <span className="mono text-ink-2">/agent</span> and the AI pays from a sub-account you fund — no signature per payment. The model
+            is treated as untrusted; four independent layers decide what actually moves.
+          </p>
+          <a
+            href={THREAT_MODEL_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+          >
+            Read the threat model <ArrowUpRight className="size-4" />
+          </a>
+        </div>
+        <ol className="overflow-hidden rounded-3xl border border-line/10 bg-surface px-5 shadow-[0_2px_24px_rgba(18,45,69,0.05)] md:px-6">
+          {AGENT_LAYERS.map(({ title, meta, body }, i) => (
+            <li key={title} className="grid grid-cols-[32px_1fr] gap-4 border-b border-line/10 py-5 last:border-b-0">
+              <span className="display flex size-8 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-ink">
+                0{i + 1}
+              </span>
+              <div>
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                  <h3 className="display text-base font-semibold text-ink">{title}</h3>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand">{meta}</span>
+                </div>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">{body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function Faq() {
+  return (
+    <section className="mx-auto w-full max-w-3xl px-5 pb-20 md:px-8 md:pb-28">
+      <SectionHeading eyebrow="Questions" title="Before you connect a wallet." />
+      <div className="mt-10 divide-y divide-line/10 rounded-3xl border border-line/10 bg-surface">
+        {FAQ.map(({ q, a }) => (
+          <details key={q} className="group px-6 py-5 [&_summary::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-ink">
+              {q}
+              <Plus className="size-4 shrink-0 text-subtle transition-transform group-open:rotate-45" />
+            </summary>
+            <p className="mt-3 text-sm leading-relaxed text-muted">{a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WhyArc() {
   return (
     <section className="bg-[#122d45] text-white dark:border-y dark:border-line/10 dark:bg-surface">
@@ -241,10 +374,13 @@ export default function Landing() {
   return (
     <div className="min-h-dvh bg-bg text-ink">
       <Hero />
+      <BuiltWith />
       <main>
         <HowItWorks />
+        <AgentSafety />
         <WhyArc />
         <Status />
+        <Faq />
         <FinalCta />
       </main>
       <footer className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 px-5 pb-10 text-xs text-subtle sm:flex-row md:px-8">

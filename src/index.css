@@ -60,3 +60,13 @@ body {
 .mono {
   font-family: 'JetBrains Mono', Menlo, monospace;
 }
+
+/* Landing "Built with" rail: the list is rendered twice, so -50% loops seamlessly */
+@keyframes vlora-rail {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.vlora-rail { animation: vlora-rail 36s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .vlora-rail { animation: none; }
+}
