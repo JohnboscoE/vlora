@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAccount, useWriteContract, useSwitchChain, useSignMessage, useSignTypedData, useSendTransaction } from 'wagmi';
 import { AgentPanel, type AgentVaultState } from './components/AgentPanel';
 import { agentChat, clearSession, ensureSession } from './lib/agentApi';
-import { readContract } from 'wagmi/actions';
+import { getPublicClient, readContract } from 'wagmi/actions';
 import { watchTx } from './lib/watchTx';
 import { erc20Abi } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
@@ -70,8 +70,10 @@ const BATCH_LIVE = getBatchSenderAddress(ACTIVE_CHAIN_ID) != null;
 const ARC_NAMES_LIVE = getArcNamesAddress(ACTIVE_CHAIN_ID) != null;
 const SWAP_VENUE = getSwapVenue(ACTIVE_CHAIN_ID);
 const SWAPS_LIVE = SWAP_VENUE != null;
-// A LI.FI quote is signed as-is if a fresh one can't be fetched, but only while it's this young
-const LIFI_QUOTE_MAX_AGE_MS = 60_000;
+// The reviewed LI.FI route is signed as-is (its calldata enforces the reviewed minimum
+// on-chain) when no better fresh one is available, but only while it's this young.
+// Replays on mainnet showed Fly routes still executing at 2 minutes old.
+const LIFI_QUOTE_MAX_AGE_MS = 90_000;
 
 function friendlyWriteError(err: unknown): string {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
@@ -852,7 +854,7 @@ export default function App() {
     let route: SwapQuote;
     if (fresh?.lifi && fresh.minOut >= reviewed.minOut) {
       route = fresh;
-    } else if (!fresh && Date.now() - reviewed.quotedAt < LIFI_QUOTE_MAX_AGE_MS) {
+    } else if (Date.now() - reviewed.quotedAt < LIFI_QUOTE_MAX_AGE_MS) {
       route = reviewed;
     } else {
       setStep(tracker, step, 'error');
@@ -862,9 +864,25 @@ export default function App() {
     const lifi = route.lifi!;
     const minLabel = `${formatTokenAmount(Number(formatUnits(route.minOut, tokenOut.decimals)), tokenOut.decimals)} ${tokenOut.symbol}`;
 
+    // Set the gas limit ourselves: an aggregator route's gas use swings between blocks
+    // (542k–609k for the same USDC→EURC route), so a wallet's own tight estimate can run
+    // out mid-swap. Use LI.FI's padded limit, or 1.5× our estimate if that's higher.
+    let gas: bigint | undefined = lifi.gasLimit;
+    try {
+      const estimate = await getPublicClient(config, { chainId: ACTIVE_CHAIN_ID })?.estimateGas({ account: address, to: lifi.to, data: lifi.data });
+      if (estimate != null) {
+        const padded = (estimate * 3n) / 2n;
+        gas = gas == null || padded > gas ? padded : gas;
+      }
+    } catch {
+      setStep(tracker, step, 'error');
+      addMessage(agentMsg(`This swap would fail right now (the route no longer fills). Nothing was sent — send the command again for a fresh quote.`, 'error'));
+      return;
+    }
+
     let hash: `0x${string}`;
     try {
-      hash = await sendTransactionAsync({ to: lifi.to, data: lifi.data, value: 0n, chainId: ACTIVE_CHAIN_ID });
+      hash = await sendTransactionAsync({ to: lifi.to, data: lifi.data, value: 0n, gas, chainId: ACTIVE_CHAIN_ID });
     } catch (err) {
       setStep(tracker, step, 'error');
       addMessage(agentMsg(friendlyWriteError(err), 'error'));

@@ -259,8 +259,11 @@ export function useTxPreview(tx: PlannedTx | null, account: `0x${string}` | unde
           if (allowance >= tx.amountIn) {
             // Runs LI.FI's exact calldata against the live chain, minimum included
             await client.call({ account, to: tx.router, data: tx.data });
-            const gas = await client.estimateGas({ account, to: tx.router, data: tx.data });
-            await finish(gas * gasPrice, false, false);
+            const estimate = await client.estimateGas({ account, to: tx.router, data: tx.data });
+            // Same limit the swap is sent with (App.tsx executeLifiSwap): the wallet reserves it
+            const padded = (estimate * 3n) / 2n;
+            const gas = tx.gasLimit != null && tx.gasLimit > padded ? tx.gasLimit : padded;
+            await finish(gas * gasPrice, true, false);
             return;
           }
           const approveCall = {
