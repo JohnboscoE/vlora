@@ -135,7 +135,8 @@ Deployed contracts (the same deployer made its first transactions on each chain,
 |---|---|---|
 | `BatchSender` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` |
 | `ArcNames` (fixed, 0.01 USDC/yr) | `0xF2DCe7fe2864FDD899b12185c610C11d425200d9` | `0x578dbd5734f13bca66a1355cca296c07823892a2` (original, 5 USDC/yr) |
-| `AgentVaultFactory` | `0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
+| `AgentVaultFactory` v2 (rolling 24h limit) | `0xF577915220e535896974A54748718B8eCE0d6EF4` | `0xE21A7446a89b3A8C9A455dC5e1c2A61D21E25982` |
+| `AgentVaultFactory` v1 (legacy, midnight reset) | `0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69` | `0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9` |
 
 | Contract | What it guarantees |
 |---|---|
@@ -144,7 +145,7 @@ Deployed contracts (the same deployer made its first transactions on each chain,
 
 Source is verified: mainnet contracts on [Sourcify](https://sourcify.dev) (exact match), testnet on the Arc explorer — links in [SECURITY.md](SECURITY.md#verified-source).
 
-**AgentVault v2 (rolling window).** The deployed factories above create v1 vaults, whose daily limit resets at midnight on-chain (the agent server holds them to a rolling 24 hours instead). To switch to v2, deploy a new factory on each network and put its address in `src/agent-config.ts`, moving the old one to `LEGACY_AGENT_VAULT_FACTORIES` so owners can still find, drain and revoke old vaults:
+**AgentVault v2 (rolling window).** New agent wallets come from the v2 factories. Wallets made by the v1 factories keep working (the agent server holds them to a rolling 24 hours), and the panel shows their owners an upgrade notice: withdraw, revoke, create a new one. To deploy a factory again (e.g. after a contract change), run the commands below, put the new address in `src/agent-config.ts`, and move the old one to `LEGACY_AGENT_VAULT_FACTORIES`:
 
 ```bash
 forge script contracts/script/DeployAgentVaultFactory.s.sol --rpc-url arc_testnet --account deployer --broadcast

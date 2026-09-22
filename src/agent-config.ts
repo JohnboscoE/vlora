@@ -5,12 +5,13 @@
 import { ARC_MAINNET_ID, ARC_TESTNET_ID, IS_MAINNET } from './chain-env';
 import { getTokens, type TokenInfo } from './tokens';
 
+// v2 factories: vaults with the rolling 24-hour limit (AgentVault.VERSION = 2)
 const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
-  // Deployed 2026-09-18, tx 0x1043edf12537df51982d55f36587b6fff2ac15b5a26af897db4210be22c148fb
-  [ARC_TESTNET_ID]: '0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9',
-  // Deployed 2026-09-19, tx 0x208b3eda8526269395cd4dc61dc15d55ad34d281aad818068a52d640c096b906
-  // (Synthra mainnet router; swaps stay off until mainnet pools exist)
-  [ARC_MAINNET_ID]: '0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69',
+  // Deployed 2026-09-22, tx 0x246944566138daf6f6cbb039774354cbb29c78215c166565544d770f2a0ec1ca
+  [ARC_TESTNET_ID]: '0xE21A7446a89b3A8C9A455dC5e1c2A61D21E25982',
+  // Deployed 2026-09-22, tx 0xec5b137ea1b797012075dcc2a8846522609a9726af8508acfe0e871224268411
+  // (Synthra mainnet router; agent swaps stay off on mainnet)
+  [ARC_MAINNET_ID]: '0xF577915220e535896974A54748718B8eCE0d6EF4',
 };
 
 /**
@@ -19,7 +20,12 @@ const AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`>> = {
  * from and revoke their old vault. The agent server holds v1 vaults to the rolling
  * limit itself (server/guards.ts).
  */
-const LEGACY_AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`[]>> = {};
+const LEGACY_AGENT_VAULT_FACTORIES: Partial<Record<number, `0x${string}`[]>> = {
+  // v1, deployed 2026-09-18
+  [ARC_TESTNET_ID]: ['0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9'],
+  // v1, deployed 2026-09-19
+  [ARC_MAINNET_ID]: ['0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69'],
+};
 
 export function getAgentFactory(chainId: number): `0x${string}` | undefined {
   return AGENT_VAULT_FACTORIES[chainId];

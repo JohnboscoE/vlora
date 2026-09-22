@@ -42,7 +42,7 @@ Everything left of the vault can be wrong or hostile; the vault's limits still h
 
 `AgentVault` v2 keeps the last 32 agent spends per token and sums those less than 24 hours old. So for any two spends less than 24 hours apart, the later one saw the earlier one, and **the total over any 24-hour period is at most `perDay`**. There's no midnight reset to exploit. If 32 spends are already inside the window, the next one reverts rather than forgetting one.
 
-v1 vaults (the first factory) used calendar-day buckets, which let a compromised key spend up to 2× the cap across midnight. For v1 vaults the server enforces the rolling bound itself (today + yesterday ≤ `perDay`), but on-chain only the calendar-day limit applies. The panel flags v1 vaults and suggests moving to a new one.
+v2 factories are live on both networks (see the README); new agent wallets get the rolling window on-chain. v1 vaults (the first factory) used calendar-day buckets, which let a compromised key spend up to 2× the cap across midnight. For v1 vaults the server enforces the rolling bound itself (today + yesterday ≤ `perDay`), but on-chain only the calendar-day limit applies. The panel flags v1 vaults and suggests moving to a new one.
 
 ## How the claims are tested
 
@@ -73,10 +73,12 @@ Slither 0.11 on `contracts/` (excluding tests and scripts): 7 results, none high
 | Contract | Network | Verification |
 |---|---|---|
 | `BatchSender` `0x40D5…a2a9` | Arc mainnet | [Sourcify, exact match](https://repo.sourcify.dev/5042/0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9) |
-| `AgentVaultFactory` v1 `0x170F…6C69` | Arc mainnet | [Sourcify, exact match](https://repo.sourcify.dev/5042/0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69) |
+| `AgentVaultFactory` v2 `0xF577…6EF4` | Arc mainnet | [Sourcify, exact match](https://repo.sourcify.dev/5042/0xF577915220e535896974A54748718B8eCE0d6EF4) |
+| `AgentVaultFactory` v1 `0x170F…6C69` (legacy) | Arc mainnet | [Sourcify, exact match](https://repo.sourcify.dev/5042/0x170FD54D7A9D0d35C0237A5B45741dF874ba6C69) |
 | `ArcNames` `0xF2DC…00d9` | Arc mainnet | [Sourcify, exact match](https://repo.sourcify.dev/5042/0xF2DCe7fe2864FDD899b12185c610C11d425200d9) |
 | `BatchSender` `0xF2DC…00d9` | Arc Testnet | [Explorer, verified](https://explorer.testnet.arc.io/address/0xF2DCe7fe2864FDD899b12185c610C11d425200d9) |
-| `AgentVaultFactory` v1 `0x40D5…a2a9` | Arc Testnet | [Explorer, verified](https://explorer.testnet.arc.io/address/0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9) |
+| `AgentVaultFactory` v2 `0xE21A…5982` | Arc Testnet | [Sourcify, exact match](https://repo.sourcify.dev/5042002/0xE21A7446a89b3A8C9A455dC5e1c2A61D21E25982) |
+| `AgentVaultFactory` v1 `0x40D5…a2a9` (legacy) | Arc Testnet | [Explorer, verified](https://explorer.testnet.arc.io/address/0x40D5AbC0EcDB140ba4DC5fF3B725c5740a0Ea2a9) |
 
 ## Reporting
 
