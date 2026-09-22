@@ -59,6 +59,7 @@ import {
   type TransferAuthorization,
 } from './lib/gasless';
 import { formatUnits } from 'viem';
+import { describeWalletError } from './lib/walletError';
 import { batchSenderAbi, getBatchSenderAddress } from './batch-config';
 import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN } from './chain-env';
 import { config } from './config';
@@ -75,16 +76,8 @@ const SWAPS_LIVE = SWAP_VENUE != null;
 // Replays on mainnet showed Fly routes still executing at 2 minutes old.
 const LIFI_QUOTE_MAX_AGE_MS = 90_000;
 
-function friendlyWriteError(err: unknown): string {
-  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  if (msg.includes('user rejected') || msg.includes('user denied')) return 'Transaction cancelled.';
-  if (msg.includes('insufficient')) {
-    return ACTIVE_CHAIN.isTestnet
-      ? 'Insufficient balance. Get test USDC from the Circle faucet (faucet.circle.com).'
-      : 'Insufficient USDC balance (remember gas on Arc is also paid in USDC).';
-  }
-  return 'Transaction failed. Please try again.';
-}
+// The real reason, not a generic "failed" (src/lib/walletError.ts)
+const friendlyWriteError = describeWalletError;
 
 function mkId() {
   return Math.random().toString(36).slice(2);

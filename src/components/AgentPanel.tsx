@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useAccount, useReadContract, useReadContracts, useWriteContract } from 'wagmi';
+import { useAccount, useReadContract, useReadContracts, useSwitchChain, useWriteContract } from 'wagmi';
+import { describeWalletError } from '@/lib/walletError';
 import { erc20Abi, formatUnits, parseUnits, type ContractFunctionParameters } from 'viem';
 import { toast } from 'sonner';
 import { Bot, ChevronDown, Loader2, Pause, Play, ShieldOff, TimerReset, X } from 'lucide-react';
@@ -36,7 +37,8 @@ const DAY = 24 * 60 * 60;
  * owner; only the agent's own actions (in agent mode) skip the owner's signature.
  */
 export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelProps) {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const factory = getAgentFactory(ACTIVE_CHAIN_ID);
   const tokens = getAgentTokens(ACTIVE_CHAIN_ID);
   const { writeContractAsync } = useWriteContract();
@@ -126,13 +128,15 @@ export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelPro
   const run = async (label: string, send: () => Promise<`0x${string}`>) => {
     setBusy(label);
     try {
+      // Every panel action is a transaction on ACTIVE_CHAIN: move the wallet there first
+      // instead of failing with a chain mismatch
+      if (chainId !== ACTIVE_CHAIN_ID) await switchChainAsync({ chainId: ACTIVE_CHAIN_ID });
       const hash = await send();
       const result = await watchTx(hash);
       if (result.outcome === 'success') toast.success(`${label}: done`);
       else toast.error(`${label}: ${result.outcome === 'reverted' ? 'reverted on-chain' : result.outcome === 'dropped' ? 'never reached the network' : 'not confirmed yet — check the explorer'}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(/user rejected|denied/i.test(msg) ? 'Cancelled.' : `${label} failed.`);
+      toast.error(`${label}: ${describeWalletError(err)}`);
     } finally {
       setBusy(null);
       void refetchVaults();
