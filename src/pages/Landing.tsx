@@ -1,6 +1,7 @@
 import { ArrowRight, ArrowUpRight, Check, Clock, MessageSquareText, ShieldCheck, PenLine, Zap, CircleDollarSign, Gauge, Plus } from 'lucide-react';
 import { ShaderBackground } from '@/components/ui/shader-background';
 import { TxDemo } from '@/components/TxDemo';
+import { PhoneMockup } from '@/components/PhoneMockup';
 import { ACTIVE_CHAIN } from '@/chain-env';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -13,6 +14,9 @@ import { getArcNamesAddress } from '@/arcnames-config';
 import { getAgentFactory } from '@/agent-config';
 
 const APP_HREF = '#/app';
+
+// Show the looping demo inside a phone frame. Set to false for the plain card.
+const SHOW_PHONE_MOCKUP = true;
 
 const STEPS = [
   {
@@ -178,7 +182,13 @@ function Hero() {
           </div>
         </div>
         <div className="flex justify-center md:justify-end">
-          <TxDemo />
+          {SHOW_PHONE_MOCKUP ? (
+            <PhoneMockup>
+              <TxDemo className="max-w-none border-0 bg-transparent p-0 shadow-none backdrop-blur-none" />
+            </PhoneMockup>
+          ) : (
+            <TxDemo />
+          )}
         </div>
       </div>
     </header>
