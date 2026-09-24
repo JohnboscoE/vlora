@@ -55,7 +55,7 @@ const TODAY = [
   'Every transaction simulated and confirmed before you sign',
 ];
 // What Vlora is built with (tools and networks, not partnerships)
-const BUILT_WITH = ['Arc', 'Circle USDC', 'EURC', 'LI.FI', 'ArcNames', 'Claude', 'Foundry', 'Sourcify'];
+const BUILT_WITH = ['Arc', 'Circle USDC', 'EURC', 'LI.FI', 'ArcNames', 'Sourcify'];
 
 const AGENT_LAYERS = [
   {
