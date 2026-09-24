@@ -2,6 +2,7 @@
 
 // server/gasless.ts
 import { getAddress, isAddress, isHex, verifyTypedData } from "viem";
+import { generatePrivateKey, privateKeyToAccount as privateKeyToAccount2 } from "viem/accounts";
 
 // server/chain.ts
 import { createPublicClient, createWalletClient, defineChain, fallback, http } from "viem";
@@ -138,6 +139,10 @@ async function handleGasless(route, request) {
   if (route === "info" && request.method === "GET") {
     return json(200, { enabled: problem == null, chainId: CHAIN_ID, ...problem ? { reason: problem } : {} });
   }
+  if (route === "check" && request.method === "GET") {
+    if (problem) return json(200, { ok: false, reason: problem });
+    return json(200, await diagnose());
+  }
   if (route !== "settle" || request.method !== "POST") return json(405, { error: "method not allowed" });
   if (problem) {
     console.error(`[gasless] misconfigured: ${problem}`);
@@ -181,8 +186,38 @@ async function handleGasless(route, request) {
     return json(400, { status: "rejected", reason: "bad request" });
   }
 }
-async function settle(auth, signature, origin) {
+async function diagnose() {
   const api = env("CIRCLE_FACILITATOR_URL") || DEFAULT_API;
+  const headers = { "content-type": "application/json", authorization: `Bearer ${env("CIRCLE_API_KEY")}` };
+  const short = (v) => JSON.stringify(v).slice(0, 300);
+  const keyCheck = await fetch(`${api}/v1/w3s/wallets`, { headers, signal: AbortSignal.timeout(15e3) }).then(async (r) => ({ status: r.status, body: short(await r.json().catch(() => null)) })).catch((e) => ({ status: 0, body: e.message.slice(0, 200) }));
+  const buyer = privateKeyToAccount2(generatePrivateKey());
+  const payTo = privateKeyToAccount2(generatePrivateKey()).address;
+  const nonce = "0x" + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
+  const auth = {
+    from: buyer.address,
+    to: payTo,
+    value: 10000n,
+    validAfter: 0n,
+    validBefore: BigInt(Math.floor(Date.now() / 1e3) + 600),
+    nonce
+  };
+  const signature = await buyer.signTypedData({
+    domain: USDC_DOMAIN,
+    types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+    primaryType: "TransferWithAuthorization",
+    message: auth
+  });
+  const probe = await fetch(`${api}/v1/facilitator/x402/settle`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(settleBody(auth, signature, "https://vlora-two.vercel.app")),
+    signal: AbortSignal.timeout(4e4)
+  }).then(async (r) => ({ status: r.status, body: short(await r.json().catch(() => null)) })).catch((e) => ({ status: 0, body: e.message.slice(0, 200) }));
+  const verdict = probe.status === 200 ? "The API key can settle on this network. A refusal of a real payment is about that payment (recipient, amount or screening), not the key." : probe.status === 401 ? "Circle rejected the API key itself (401). Check CIRCLE_API_KEY, and that it is a LIVE key on mainnet." : probe.status === 403 ? "Circle refuses to settle for this key (403) even for a throwaway payment: the account/key is not enabled for Facilitator Service on this network." : `Unexpected response from Circle (${probe.status}).`;
+  return { network: NETWORK, keyCheck, settleProbe: probe, verdict };
+}
+function settleBody(auth, signature, origin) {
   const value = auth.value.toString();
   const requirements = {
     scheme: "exact",
@@ -193,7 +228,7 @@ async function settle(auth, signature, origin) {
     maxTimeoutSeconds: SETTLE_WAIT_S,
     extra: { name: "USDC", version: "2" }
   };
-  const payload = {
+  return {
     x402Version: 2,
     paymentPayload: {
       x402Version: 2,
@@ -215,6 +250,10 @@ async function settle(auth, signature, origin) {
     },
     paymentRequirements: requirements
   };
+}
+async function settle(auth, signature, origin) {
+  const api = env("CIRCLE_FACILITATOR_URL") || DEFAULT_API;
+  const payload = settleBody(auth, signature, origin);
   const res = await fetch(`${api}/v1/facilitator/x402/settle`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${env("CIRCLE_API_KEY")}` },

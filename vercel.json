@@ -6,6 +6,9 @@
     },
     "api/gasless/settle.js": {
       "maxDuration": 60
+    },
+    "api/gasless/check.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

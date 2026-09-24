@@ -7,9 +7,10 @@
 // Env: CIRCLE_API_KEY (TEST_API_KEY:… on testnet, LIVE_API_KEY:… on mainnet).
 // Unset → gasless is off and the app sends normally.
 import { getAddress, isAddress, isHex, verifyTypedData, type Address, type Hex } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { CHAIN_ID, publicClient } from './chain';
 
-export type GaslessRoute = 'info' | 'settle';
+export type GaslessRoute = 'info' | 'settle' | 'check';
 
 const USDC: Address = '0x3600000000000000000000000000000000000000';
 const NETWORK = `eip155:${CHAIN_ID}`;
@@ -117,6 +118,10 @@ export async function handleGasless(route: GaslessRoute, request: Request): Prom
     // Only a yes/no plus a variable name for diagnosis — never the key
     return json(200, { enabled: problem == null, chainId: CHAIN_ID, ...(problem ? { reason: problem } : {}) });
   }
+  if (route === 'check' && request.method === 'GET') {
+    if (problem) return json(200, { ok: false, reason: problem });
+    return json(200, await diagnose());
+  }
   if (route !== 'settle' || request.method !== 'POST') return json(405, { error: 'method not allowed' });
   if (problem) {
     console.error(`[gasless] misconfigured: ${problem}`);
@@ -173,8 +178,62 @@ export async function handleGasless(route: GaslessRoute, request: Request): Prom
   }
 }
 
-async function settle(auth: Authorization, signature: Hex, origin: string): Promise<SettleResult> {
+/**
+ * Is the API key itself allowed to settle here? Runs a real /settle with a freshly
+ * generated, empty wallet: nothing can move (it has no USDC), but Circle answers with
+ * either a policy refusal (the key/account isn't permitted) or `insufficient_funds`
+ * (the key works, so a refusal of a real payment is about that payment).
+ */
+async function diagnose() {
   const api = env('CIRCLE_FACILITATOR_URL') || DEFAULT_API;
+  const headers = { 'content-type': 'application/json', authorization: `Bearer ${env('CIRCLE_API_KEY')}` };
+  const short = (v: unknown) => JSON.stringify(v).slice(0, 300);
+
+  // 1. Is the key accepted by Circle at all?
+  const keyCheck = await fetch(`${api}/v1/w3s/wallets`, { headers, signal: AbortSignal.timeout(15_000) })
+    .then(async (r) => ({ status: r.status, body: short(await r.json().catch(() => null)) }))
+    .catch((e: Error) => ({ status: 0, body: e.message.slice(0, 200) }));
+
+  // 2. Can it settle? An empty throwaway buyer and payout address: no funds can move.
+  const buyer = privateKeyToAccount(generatePrivateKey());
+  const payTo = privateKeyToAccount(generatePrivateKey()).address;
+  const nonce = ('0x' + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex')) as Hex;
+  const auth: Authorization = {
+    from: buyer.address,
+    to: payTo,
+    value: 10_000n,
+    validAfter: 0n,
+    validBefore: BigInt(Math.floor(Date.now() / 1000) + 600),
+    nonce,
+  };
+  const signature = await buyer.signTypedData({
+    domain: USDC_DOMAIN,
+    types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+    primaryType: 'TransferWithAuthorization',
+    message: auth,
+  });
+  const probe = await fetch(`${api}/v1/facilitator/x402/settle`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(settleBody(auth, signature, 'https://vlora-two.vercel.app')),
+    signal: AbortSignal.timeout(40_000),
+  })
+    .then(async (r) => ({ status: r.status, body: short(await r.json().catch(() => null)) }))
+    .catch((e: Error) => ({ status: 0, body: e.message.slice(0, 200) }));
+
+  const verdict =
+    probe.status === 200
+      ? 'The API key can settle on this network. A refusal of a real payment is about that payment (recipient, amount or screening), not the key.'
+      : probe.status === 401
+        ? 'Circle rejected the API key itself (401). Check CIRCLE_API_KEY, and that it is a LIVE key on mainnet.'
+        : probe.status === 403
+          ? 'Circle refuses to settle for this key (403) even for a throwaway payment: the account/key is not enabled for Facilitator Service on this network.'
+          : `Unexpected response from Circle (${probe.status}).`;
+  return { network: NETWORK, keyCheck, settleProbe: probe, verdict };
+}
+
+/** The x402 settle body; shared by settle() and the diagnostic probe */
+function settleBody(auth: Authorization, signature: Hex, origin: string) {
   const value = auth.value.toString();
   const requirements = {
     scheme: 'exact',
@@ -185,7 +244,7 @@ async function settle(auth: Authorization, signature: Hex, origin: string): Prom
     maxTimeoutSeconds: SETTLE_WAIT_S,
     extra: { name: 'USDC', version: '2' },
   };
-  const payload = {
+  return {
     x402Version: 2,
     paymentPayload: {
       x402Version: 2,
@@ -207,6 +266,11 @@ async function settle(auth: Authorization, signature: Hex, origin: string): Prom
     },
     paymentRequirements: requirements,
   };
+}
+
+async function settle(auth: Authorization, signature: Hex, origin: string): Promise<SettleResult> {
+  const api = env('CIRCLE_FACILITATOR_URL') || DEFAULT_API;
+  const payload = settleBody(auth, signature, origin);
 
   const res = await fetch(`${api}/v1/facilitator/x402/settle`, {
     method: 'POST',

@@ -8,7 +8,7 @@ import { CHAIN_ID, NETWORK_NAME } from './chain';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ROUTES = new Set<AgentRoute>(['info', 'nonce', 'login', 'chat']);
-const GASLESS_ROUTES = new Set<GaslessRoute>(['info', 'settle']);
+const GASLESS_ROUTES = new Set<GaslessRoute>(['info', 'settle', 'check']);
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
   const chunks: Buffer[] = [];
