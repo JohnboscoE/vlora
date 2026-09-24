@@ -107,8 +107,9 @@ export type SettleResult =
   | { status: 'success'; transaction: Hex }
   /** Circle recorded it and is still settling; the signature can still land */
   | { status: 'pending'; reason: string }
-  /** Circle rejected it before recording: nothing moved and the signature won't be used */
-  | { status: 'rejected'; reason: string };
+  /** Circle rejected it before recording: nothing moved and the signature won't be used.
+   *  disable: retrying won't help (key or account policy), stop offering gasless */
+  | { status: 'rejected'; reason: string; disable?: boolean };
 
 export async function handleGasless(route: GaslessRoute, request: Request): Promise<Response> {
   const problem = configProblem();
@@ -218,15 +219,23 @@ async function settle(auth: Authorization, signature: Hex, origin: string): Prom
     transaction?: string;
     errorReason?: string;
     message?: string;
+    errors?: unknown[];
     extensions?: { 'settlement-status'?: { status?: string; paymentId?: string } };
   };
 
   if (res.status !== 200) {
-    console.error(`[gasless] Circle ${res.status}: ${data.message ?? ''}`);
+    // Circle's error body is secret-free: log all of it and pass the details on
+    console.error(`[gasless] Circle ${res.status}: ${JSON.stringify(data).slice(0, 800)}`);
     // 4xx is a rejected request ("carries no settlement outcome"); 5xx is unknown.
     // 409 means this authorization is already bound to a payment, so it may still land.
     if (res.status >= 500 || res.status === 409) return { status: 'pending', reason: `Circle error ${res.status}` };
-    return { status: 'rejected', reason: circleReason(res.status, data.message) };
+    const details = circleErrorDetails(data.errors);
+    return {
+      status: 'rejected',
+      reason: `${circleReason(res.status, data.message)}${details ? ` — ${details}` : ''}`,
+      // A policy refusal (403) or bad key (401) won't change by retrying: the client stops offering gasless
+      ...(res.status === 401 || res.status === 403 ? { disable: true } : {}),
+    };
   }
   if (data.success && data.transaction && isHex(data.transaction)) return { status: 'success', transaction: data.transaction };
 
@@ -261,9 +270,29 @@ async function pollStatus(api: string, paymentId: string): Promise<Hex | null> {
   return null;
 }
 
+/** Circle's `errors` array, flattened to one line (entries may be strings or objects) */
+function circleErrorDetails(errors: unknown[] | undefined): string {
+  if (!Array.isArray(errors)) return '';
+  return errors
+    .map((e) => {
+      if (typeof e === 'string') return e;
+      if (e && typeof e === 'object') {
+        const o = e as Record<string, unknown>;
+        const text = [o.code, o.error, o.message, o.location ?? o.field].filter((v) => typeof v === 'string' || typeof v === 'number');
+        return text.length ? text.join(' ') : JSON.stringify(o);
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('; ')
+    .slice(0, 300);
+}
+
 function circleReason(status: number, message?: string): string {
   if (status === 401) return 'Circle rejected the API key';
-  if (status === 403) return message ?? 'Circle refused this payment (below the minimum or not allowed)';
+  if (status === 403) {
+    return `Circle refused to settle for this API key (${message ?? 'forbidden'}). Check in Circle Console that the key has Facilitator access on Arc mainnet`;
+  }
   if (status === 429) return 'Circle rate limit — try again in a minute';
   return message ?? `Circle rejected the request (${status})`;
 }

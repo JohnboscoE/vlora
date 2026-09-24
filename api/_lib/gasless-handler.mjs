@@ -223,9 +223,15 @@ async function settle(auth, signature, origin) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status !== 200) {
-    console.error(`[gasless] Circle ${res.status}: ${data.message ?? ""}`);
+    console.error(`[gasless] Circle ${res.status}: ${JSON.stringify(data).slice(0, 800)}`);
     if (res.status >= 500 || res.status === 409) return { status: "pending", reason: `Circle error ${res.status}` };
-    return { status: "rejected", reason: circleReason(res.status, data.message) };
+    const details = circleErrorDetails(data.errors);
+    return {
+      status: "rejected",
+      reason: `${circleReason(res.status, data.message)}${details ? ` \u2014 ${details}` : ""}`,
+      // A policy refusal (403) or bad key (401) won't change by retrying: the client stops offering gasless
+      ...res.status === 401 || res.status === 403 ? { disable: true } : {}
+    };
   }
   if (data.success && data.transaction && isHex(data.transaction)) return { status: "success", transaction: data.transaction };
   const recorded = data.extensions?.["settlement-status"];
@@ -255,9 +261,23 @@ async function pollStatus(api, paymentId) {
   }
   return null;
 }
+function circleErrorDetails(errors) {
+  if (!Array.isArray(errors)) return "";
+  return errors.map((e) => {
+    if (typeof e === "string") return e;
+    if (e && typeof e === "object") {
+      const o = e;
+      const text = [o.code, o.error, o.message, o.location ?? o.field].filter((v) => typeof v === "string" || typeof v === "number");
+      return text.length ? text.join(" ") : JSON.stringify(o);
+    }
+    return "";
+  }).filter(Boolean).join("; ").slice(0, 300);
+}
 function circleReason(status, message) {
   if (status === 401) return "Circle rejected the API key";
-  if (status === 403) return message ?? "Circle refused this payment (below the minimum or not allowed)";
+  if (status === 403) {
+    return `Circle refused to settle for this API key (${message ?? "forbidden"}). Check in Circle Console that the key has Facilitator access on Arc mainnet`;
+  }
   if (status === 429) return "Circle rate limit \u2014 try again in a minute";
   return message ?? `Circle rejected the request (${status})`;
 }

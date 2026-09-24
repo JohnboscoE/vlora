@@ -53,8 +53,8 @@ export type SettleResult =
   | { status: 'success'; transaction: `0x${string}` }
   /** Unknown yet: the transfer may still land, so never fall back to a second send */
   | { status: 'pending'; reason: string }
-  /** Rejected before Circle recorded it: nothing moved */
-  | { status: 'rejected'; reason: string };
+  /** Rejected before Circle recorded it: nothing moved. disable: retrying won't help */
+  | { status: 'rejected'; reason: string; disable?: boolean };
 
 export async function settleGasless(auth: TransferAuthorization, signature: `0x${string}`): Promise<SettleResult> {
   let res: Response;
@@ -104,6 +104,11 @@ export async function authorizationUsed(auth: TransferAuthorization): Promise<bo
 }
 
 let cached: Promise<boolean> | null = null;
+
+/** After Circle refuses on policy grounds, stop offering gasless for this session */
+export function disableGaslessForSession() {
+  cached = Promise.resolve(false);
+}
 
 /** Whether this deployment has Circle gasless sends turned on (CIRCLE_API_KEY set) */
 export function fetchGaslessEnabled(): Promise<boolean> {

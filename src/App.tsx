@@ -53,6 +53,7 @@ import {
   AUTH_VALIDITY_S,
   authorizationUsed,
   buildAuthorization,
+  disableGaslessForSession,
   settleGasless,
   TRANSFER_WITH_AUTHORIZATION_TYPES,
   usdcDomain,
@@ -432,9 +433,12 @@ export default function App() {
 
     if (result.status === 'rejected') {
       setStep(tracker, 1, 'error');
+      if (result.disable) disableGaslessForSession();
       addMessage(
         agentMsg(
-          `Circle couldn't sponsor this send (${result.reason}). Nothing moved. To pay the fee yourself, send it again and untick "Gasless".`,
+          result.disable
+            ? `Circle couldn't sponsor this send: ${result.reason}. Nothing moved. Gasless is off for now — send it again and you'll pay the network fee (about a cent) yourself.`
+            : `Circle couldn't sponsor this send (${result.reason}). Nothing moved. To pay the fee yourself, send it again and untick "Gasless".`,
           'error',
         ),
       );
