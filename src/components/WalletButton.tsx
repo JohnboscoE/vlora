@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ConnectKitButton } from 'connectkit';
 import { toast } from 'sonner';
 import { Check, Copy, LogOut, Mail, Wallet } from 'lucide-react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useSetActiveWallet } from '@privy-io/wagmi';
+import { usePrivy } from '@privy-io/react-auth';
 import { useAccount } from 'wagmi';
 import { PRIVY_APP_ID } from '@/config';
 
@@ -71,16 +70,8 @@ function InjectedWalletButton() {
  */
 function PrivyWalletButton() {
   const { ready, authenticated, user, login, logout } = usePrivy();
-  const { wallets } = useWallets();
-  const { setActiveWallet } = useSetActiveWallet();
-  const { address, isConnected } = useAccount();
-
-  // After an email/Google login the embedded wallet exists but wagmi may not have it
-  // as the active connection yet; adopt the first one Privy reports.
-  useEffect(() => {
-    const first = wallets[0];
-    if (authenticated && first && !isConnected) void setActiveWallet(first);
-  }, [authenticated, wallets, isConnected, setActiveWallet]);
+  // providers.tsx decides which wallet wagmi uses (pickActiveWallet)
+  const { address } = useAccount();
 
   if (!ready) {
     return <span className={`${idle} pointer-events-none opacity-60`}>Loading…</span>;

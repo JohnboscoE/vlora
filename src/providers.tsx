@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { WagmiProvider } from 'wagmi';
-import { PrivyProvider } from '@privy-io/react-auth';
-import { WagmiProvider as PrivyWagmiProvider } from '@privy-io/wagmi';
+import { PrivyProvider, type ConnectedWallet, type User } from '@privy-io/react-auth';
+import { WagmiProvider as PrivyWagmiProvider, type SetActiveWalletForWagmiType } from '@privy-io/wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConnectKitProvider } from 'connectkit';
 import { Toaster } from 'sonner';
@@ -9,6 +9,24 @@ import { arc, config, PRIVY_APP_ID } from './config';
 import { useTheme } from './lib/theme';
 
 const queryClient = new QueryClient();
+
+/**
+ * Which wallet wagmi should treat as connected. Without this, Privy falls back to
+ * wagmi's reconnect(), which restores the last connector from browser storage — so
+ * after disconnecting a browser wallet and signing in with Google, the old wallet
+ * came back instead of the new embedded one.
+ *
+ * Privy's `user.wallet` is the account the user actually signed in with (their
+ * embedded wallet after email/Google, or the browser wallet they connected).
+ */
+const pickActiveWallet: SetActiveWalletForWagmiType = ({ wallets, user }: { wallets: ConnectedWallet[]; user: User | null }) => {
+  const primary = user?.wallet?.address.toLowerCase();
+  return (
+    (primary ? wallets.find((w) => w.address.toLowerCase() === primary) : undefined) ??
+    wallets.find((w) => w.walletClientType === 'privy') ??
+    wallets[0]
+  );
+};
 
 /**
  * Two ways in, same app underneath:
@@ -54,7 +72,7 @@ export function Providers({ children }: { children: ReactNode }) {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <PrivyWagmiProvider config={config}>
+        <PrivyWagmiProvider config={config} setActiveWalletForWagmi={pickActiveWallet}>
           {children}
           {toaster}
         </PrivyWagmiProvider>
