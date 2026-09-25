@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ConnectKitButton } from 'connectkit';
-import { LogOut, Mail, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { Check, Copy, LogOut, Mail, Wallet } from 'lucide-react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useSetActiveWallet } from '@privy-io/wagmi';
 import { useAccount } from 'wagmi';
@@ -12,6 +13,31 @@ const idle =
   'flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.03] active:scale-[0.98]';
 
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+/**
+ * The address chip doubles as a copy button — an embedded wallet has no wallet UI
+ * of its own to copy from, so this is the only way to get the full address out.
+ */
+function AddressChip({ address, title }: { address: `0x${string}`; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(address).then(
+      () => {
+        setCopied(true);
+        toast.success('Wallet address copied');
+        setTimeout(() => setCopied(false), 1800);
+      },
+      () => toast.error(`Couldn't copy. Your address is ${address}`),
+    );
+  };
+  return (
+    <button onClick={copy} className={connected} title={title ?? 'Copy your wallet address'} aria-label={`Copy wallet address ${address}`}>
+      <span className="size-2 rounded-full bg-success" />
+      <span className="mono text-xs">{short(address)}</span>
+      {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5 text-muted" />}
+    </button>
+  );
+}
 
 /** ConnectKit flow: browser wallet only (used when Privy isn't configured) */
 function InjectedWalletButton() {
@@ -71,16 +97,18 @@ function PrivyWalletButton() {
     );
   }
 
-  const label = address ? short(address) : (user?.email?.address ?? user?.google?.email ?? 'Signed in');
-  const viaEmail = !!(user?.email?.address ?? user?.google?.email);
+  const email = user?.email?.address ?? user?.google?.email;
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className={connected} title={viaEmail ? `Wallet for ${user?.email?.address ?? user?.google?.email}` : undefined}>
-        <span className="size-2 rounded-full bg-success" />
-        {viaEmail && <Mail className="size-3.5 text-muted" />}
-        <span className="mono text-xs">{label}</span>
-      </span>
+      {address ? (
+        <AddressChip address={address} title={email ? `Wallet for ${email} — click to copy` : 'Copy your wallet address'} />
+      ) : (
+        <span className={connected}>
+          <Mail className="size-3.5 text-muted" />
+          <span className="mono text-xs">{email ?? 'Signed in'}</span>
+        </span>
+      )}
       <button
         onClick={() => void logout()}
         aria-label="Sign out"
