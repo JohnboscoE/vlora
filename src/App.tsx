@@ -119,8 +119,7 @@ const QUESTION_REPLIES: Record<QuestionTopic, string> = {
       'You\'ll see the live price, the minimum you\'ll receive, and the fee before your wallet signs. If the price moves more than 0.5%, the swap reverts and nothing changes. I can\'t route through Uniswap or other exchanges.'
     : 'Swaps aren\'t available on this network yet — there\'s no USDC/EURC market I can route to here, so nothing will be swapped.',
   liquidity:
-    'Adding liquidity isn\'t available in Vlora yet — there\'s no pool integration, so I can\'t deposit into Uniswap or any other protocol.\n\n' +
-    'Right now I can send USDC and check your balance.',
+    'Vlora doesn\'t do liquidity pools — it\'s a payments app. I can send and swap stablecoins, pay several people at once, and handle .arc names.',
   send:
     'To send USDC, type the amount and a full wallet address, for example:\n"send 10 USDC to 0x…"\n\n' +
     'I\'ll show you a confirmation with the amount, recipient and network. Nothing moves until you approve it in your wallet. ' +
@@ -150,7 +149,6 @@ const CAPABILITIES = [
   { label: 'Payment links', live: true },
   { label: '.arc names', live: ARC_NAMES_LIVE },
   { label: 'Swaps (USDC · EURC · cirBTC)', live: SWAPS_LIVE },
-  { label: 'Add liquidity', live: false },
 ];
 
 // "/" menu in the composer
@@ -1273,17 +1271,6 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
         agentMsg(
           `Swap preview: ${pendingIntent.amountIn} ${pendingIntent.tokenIn} to ${pendingIntent.tokenOut}. ` +
             `Swaps aren\'t available on ${ACTIVE_CHAIN.name} yet — nothing was sent.`,
-          'info',
-        ),
-      );
-    } else if (pendingIntent.type === 'add_lp') {
-      setPendingIntent(null);
-      addMessage(
-        agentMsg(
-          `LP intent: ${pendingIntent.amount} ${pendingIntent.token}` +
-            `${pendingIntent.pair ? ` in the ${pendingIntent.pair} pool` : ''}` +
-            `${pendingIntent.protocol ? ` on ${pendingIntent.protocol}` : ''}. ` +
-            'Liquidity execution isn\'t built yet — nothing was sent. It needs a pool contract integration on Arc.',
           'info',
         ),
       );

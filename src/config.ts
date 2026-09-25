@@ -4,6 +4,7 @@
  */
 
 import { http, fallback, createConfig } from 'wagmi'
+import { createConfig as createPrivyConfig } from '@privy-io/wagmi'
 import { mainnet } from 'wagmi/chains'
 import { defineChain } from 'viem'
 import { injected } from 'wagmi/connectors'
@@ -25,7 +26,7 @@ const EXTRA_RPC_URLS: Record<number, string[]> = {
 // Build the active Arc chain (testnet or mainnet, per chain-env.ts) from the
 // onchain-facts registry instead of importing a fixed chain from viem/chains —
 // that keeps this file correct no matter which network is active.
-const arc = defineChain({
+export const arc = defineChain({
   id: ACTIVE_CHAIN.chainId,
   name: ACTIVE_CHAIN.name,
   nativeCurrency: {
@@ -50,15 +51,24 @@ registerChain(arc.id, arc.rpcUrls.default.http[0])
 // but they don't block the app's own origin. Direct hosts remain as fallbacks.
 const SAME_ORIGIN_RPC = `${window.location.origin}/rpc/${ACTIVE_CHAIN.isTestnet ? 'testnet' : 'mainnet'}`
 
-export const config = createConfig({
-  chains: [arc, mainnet], // mainnet needed for ENS resolution
-  connectors: [injected()],
-  transports: {
-    [arc.id]: fallback(
-      [SAME_ORIGIN_RPC, ...ACTIVE_CHAIN.rpcUrls, ...(EXTRA_RPC_URLS[ACTIVE_CHAIN.chainId] ?? [])].map((url) =>
-        http(url, { retryCount: 2, timeout: 12_000 }),
-      ),
+/**
+ * Set VITE_PRIVY_APP_ID to offer email / Google sign-in with an embedded wallet
+ * (src/providers.tsx). Unset, the app keeps the plain browser-wallet flow.
+ */
+export const PRIVY_APP_ID = (import.meta.env.VITE_PRIVY_APP_ID ?? '').trim()
+
+const chains = [arc, mainnet] as const // mainnet needed for ENS resolution
+const transports = {
+  [arc.id]: fallback(
+    [SAME_ORIGIN_RPC, ...ACTIVE_CHAIN.rpcUrls, ...(EXTRA_RPC_URLS[ACTIVE_CHAIN.chainId] ?? [])].map((url) =>
+      http(url, { retryCount: 2, timeout: 12_000 }),
     ),
-    [mainnet.id]: http(), // ENS resolution uses mainnet
-  },
-})
+  ),
+  [mainnet.id]: http(), // ENS resolution uses mainnet
+}
+
+// With Privy, connections are owned by Privy (embedded wallet or an external one it
+// connected), so its createConfig takes no connectors of our own.
+export const config = PRIVY_APP_ID
+  ? createPrivyConfig({ chains, transports })
+  : createConfig({ chains, connectors: [injected()], transports })

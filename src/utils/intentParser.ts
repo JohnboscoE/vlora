@@ -1,7 +1,7 @@
 // Parses natural-language DeFi commands into structured intents.
 // This runs entirely client-side — no LLM call, pure pattern matching.
 
-export type IntentType = 'send' | 'batch' | 'contact_add' | 'contacts_list' | 'request' | 'arcname' | 'swap' | 'add_lp' | 'balance' | 'chat' | 'question' | 'unknown';
+export type IntentType = 'send' | 'batch' | 'contact_add' | 'contacts_list' | 'request' | 'arcname' | 'swap' | 'balance' | 'chat' | 'question' | 'unknown';
 
 export interface SendIntent {
   type: 'send';
@@ -60,14 +60,6 @@ export interface SwapIntent {
   tokenOut: string;
 }
 
-export interface AddLpIntent {
-  type: 'add_lp';
-  amount: string;
-  token: string;
-  pair?: string;
-  protocol?: string;
-}
-
 export interface BalanceIntent {
   type: 'balance';
   token?: string;
@@ -92,11 +84,10 @@ export interface UnknownIntent {
   raw: string;
 }
 
-export type ParsedIntent = SendIntent | BatchIntent | ContactAddIntent | ContactsListIntent | RequestIntent | ArcNameIntent | SwapIntent | AddLpIntent | BalanceIntent | ChatIntent | QuestionIntent | UnknownIntent;
+export type ParsedIntent = SendIntent | BatchIntent | ContactAddIntent | ContactsListIntent | RequestIntent | ArcNameIntent | SwapIntent | BalanceIntent | ChatIntent | QuestionIntent | UnknownIntent;
 
 // Supported tokens on Arc
 const KNOWN_TOKENS = ['USDC', 'EURC', 'CIRBTC', 'ETH', 'WETH', 'WBTC', 'ARB', 'OP'];
-const KNOWN_PROTOCOLS = ['uniswap', 'sushi', 'curve', 'velodrome', 'aerodrome', 'balancer'];
 
 // Everyday currency words → token symbols ("euros" → EURC, "dollars" → USDC)
 const TOKEN_ALIASES: Record<string, string> = {
@@ -140,11 +131,6 @@ function findToken(text: string, exclude?: string): string {
 function findAddress(text: string): string | null {
   const match = text.match(/0x[a-fA-F0-9]{40}/);
   return match ? match[0] : null;
-}
-
-function findProtocol(text: string): string | undefined {
-  const lower = text.toLowerCase();
-  return KNOWN_PROTOCOLS.find((p) => lower.includes(p));
 }
 
 const ADDRESS_RE = /0x[a-fA-F0-9]{40}/g;
@@ -268,17 +254,6 @@ export function parseIntent(input: string): ParsedIntent {
     return { type: 'swap', amountIn: amount, tokenIn, tokenOut };
   }
 
-  // ---- ADD LP ----
-  if (/\b(add|provide|deposit|lp|liquidity)\b/.test(lower)) {
-    const amount = findAmount(input) ?? '0';
-    const token = findToken(input);
-    const protocol = findProtocol(input);
-    // Detect pair e.g. "USDC/EURC" or "USDC-ETH"
-    const pairMatch = input.match(/([A-Za-z]+)[\/\-]([A-Za-z]+)/);
-    const pair = pairMatch ? `${pairMatch[1].toUpperCase()}/${pairMatch[2].toUpperCase()}` : undefined;
-    return { type: 'add_lp', amount, token, pair, protocol };
-  }
-
   // ---- CHAT ---- (checked last so "hi, send 5 USDC to 0x…" still sends)
   if (HELP_RE.test(lower)) {
     return { type: 'chat', kind: 'help' };
@@ -316,8 +291,6 @@ export function describeIntent(intent: ParsedIntent): string {
       return `Send ${intent.amount} ${intent.token} to ${intent.recipient || '[no address found]'}`;
     case 'swap':
       return `Swap ${intent.amountIn} ${intent.tokenIn} for ${intent.tokenOut}`;
-    case 'add_lp':
-      return `Add ${intent.amount} ${intent.token} as liquidity${intent.pair ? ` to ${intent.pair}` : ''}${intent.protocol ? ` on ${intent.protocol}` : ''}`;
     case 'balance':
       return `Check ${intent.token ?? 'USDC'} balance`;
     case 'chat':
@@ -333,7 +306,6 @@ export function describeIntent(intent: ParsedIntent): string {
 export const EXAMPLE_PROMPTS = [
   'Send 1 USDC to 0x',
   'Swap 50 USDC for EURC',
-  'Add 100 USDC/EURC liquidity on Uniswap',
   'Check my USDC balance',
 ];
 

@@ -114,7 +114,6 @@ const NEXT = [
   ...(!batchLive ? ['Batch payments'] : []),
   ...(!swapsLive ? ['Swaps between USDC, EURC and more'] : []),
   ...(!agentLive ? ['Agent wallet: an AI sub-account with its own signing key per user'] : []),
-  'Adding liquidity',
   'A directory of Arc apps you can use from chat',
 ];
 

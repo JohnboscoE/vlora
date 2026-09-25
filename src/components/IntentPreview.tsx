@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import {
   ArrowRight,
   ArrowUpDown,
-  Droplets,
   Wallet,
   X,
   AlertTriangle,
@@ -92,7 +91,7 @@ export function IntentPreview({
           : intent.type === 'swap' && swapsLive
             ? validateSwap(intent, balances)
             : null;
-  const previewOnly = intent.type === 'add_lp' || (intent.type === 'swap' && !swapsLive);
+  const previewOnly = intent.type === 'swap' && !swapsLive;
 
   // Live quote for swaps that pass the local checks
   const swapCheck = intent.type === 'swap' && sendCheck?.ok && 'venue' in sendCheck ? sendCheck : null;
@@ -262,12 +261,12 @@ export function IntentPreview({
 
           {previewOnly && (
             <Notice tone="neutral" icon={Info}>
-              Preview only — {intent.type === 'swap' ? 'swaps' : 'liquidity deposits'} can't be executed yet. Nothing will be sent.
+              Preview only — swaps aren't available on this network yet. Nothing will be sent.
             </Notice>
           )}
 
           {intent.type === 'unknown' && (
-            <Notice tone="danger">Command not recognized. Try: "send", "swap", "add liquidity", or "check balance".</Notice>
+            <Notice tone="danger">Command not recognized. Try: "send", "swap", "pay several people", or "check balance".</Notice>
           )}
 
           {wrongChain && !previewOnly ? (
@@ -765,21 +764,6 @@ function IntentRows({
             {intent.tokenOut === 'USDC' && <TokenUSDC size={16} variant="branded" />}
             {intent.tokenOut} (no quote yet)
           </Row>
-          <Row label="Network">{ACTIVE_CHAIN.name}</Row>
-        </div>
-      );
-
-    case 'add_lp':
-      return (
-        <div className="space-y-3">
-          <RowsHeader icon={Droplets} title="Add liquidity" />
-          <Row label="Amount">
-            {intent.amount} {intent.token}
-          </Row>
-          {intent.pair && <Row label="Pair">{intent.pair}</Row>}
-          {intent.protocol && (
-            <Row label="Protocol">{intent.protocol.charAt(0).toUpperCase() + intent.protocol.slice(1)}</Row>
-          )}
           <Row label="Network">{ACTIVE_CHAIN.name}</Row>
         </div>
       );

@@ -44,10 +44,12 @@ Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (se
 | Pay and register `.arc` names ([ArcNames](https://github.com/JohnboscoE/ArcNames)) — 0.01 USDC/year on mainnet | ✅ | ✅ |
 | Swaps USDC ⇄ EURC ⇄ cirBTC | ✅ via Synthra | ✅ via LI.FI (the Arc Portal's swap aggregator) |
 | Batch payments (many recipients, one tx) | ✅ | ✅ |
+| Email / Google sign-in with an embedded wallet (Privy) | ✅ with `VITE_PRIVY_APP_ID` | ✅ with `VITE_PRIVY_APP_ID` |
 | Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only, ≤ 50 USDC/day cap, unaudited |
 
 ## What it does
 
+- **Sign in without a wallet** — with Privy configured, email or Google creates an embedded wallet on the spot; people who already have a wallet still connect theirs. Both paths behave the same everywhere in the app.
 - **Agent wallet (beta)** — type `/agent` and the AI acts from a sub-account you fund, within limits the contract enforces; `/exit` returns to normal mode. See [Why the agent can't drain you](#why-the-agent-cant-drain-you).
 - **Check before you sign** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
@@ -114,7 +116,7 @@ Import the repo in Vercel with these settings (Vite is detected automatically):
 | Output Directory | `dist` |
 | Install Command | default — the committed `.npmrc` handles a known peer-dependency conflict |
 
-The web app needs no environment variables. Every push to `main` redeploys. For the agent wallet, add its three environment variables (see [Agent wallet](#agent-wallet-beta)) and redeploy — Vercel only applies new variables to new deployments. If *Deployment Protection* is on, only people logged in to your Vercel team can open the site.
+The web app needs no environment variables (set `VITE_PRIVY_APP_ID` for email/Google sign-in, and `VITE_ARC_NETWORK=mainnet` for the mainnet build). Every push to `main` redeploys. For the agent wallet, add its three environment variables (see [Agent wallet](#agent-wallet-beta)) and redeploy — Vercel only applies new variables to new deployments. If *Deployment Protection* is on, only people logged in to your Vercel team can open the site.
 
 ## Contracts
 
@@ -192,6 +194,18 @@ Then in the app:
 In the panel you can **Pause/Resume**, **Extend 7d** (also re-points the vault at the server's current agent key), **Withdraw all**, and **Revoke** — undone with **Re-enable**.
 
 The agent uses Claude Haiku 4.5, the cheapest current model — roughly $3 per 1,000 messages. It only maps requests onto four tools; the safety-critical checks are deterministic code and on-chain limits.
+
+## Sign in with email or Google (Privy)
+
+Set `VITE_PRIVY_APP_ID` and the wallet button opens [Privy](https://privy.io)'s modal, which offers a browser wallet, email, or Google. Email and Google users get an **embedded wallet** created on first login (keys held by Privy; Vlora never sees them), and it works everywhere in the app — sends, swaps, `.arc` names, and creating an agent wallet. Leave the variable unset and the app keeps the plain browser-wallet flow (ConnectKit + injected), exactly as before.
+
+| Variable | What it is |
+|---|---|
+| `VITE_PRIVY_APP_ID` | Your app id from the [Privy dashboard](https://dashboard.privy.io). Public by design (it ships in the frontend bundle). Unset → email/Google sign-in is hidden. |
+
+In the Privy dashboard: enable the **Wallet**, **Email** and **Google** login methods, turn on embedded wallets for *users without wallets*, and add your origins (`http://localhost:5173` and your Vercel domain) to the allowed list. Arc is passed to Privy as a custom chain from `src/config.ts`, so no chain setup is needed there.
+
+New wallets start empty, and on Arc the network fee is paid in USDC — so a brand-new email user needs a little USDC before their first send. Arc's [Onramp widget](https://docs.arc.io/app-kit/onramp) (card / Apple Pay / bank transfer, Circle API key + KYB required) is the natural next step for that.
 
 ## Gasless sends (Circle Facilitator)
 
