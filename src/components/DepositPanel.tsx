@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import QRCode from 'qrcode';
@@ -11,6 +11,15 @@ interface OnrampInfo {
   enabled: boolean;
   reason?: string;
 }
+
+/** What server/onramp.ts returns: a short-lived session for one wallet */
+interface OnrampSession {
+  widgetUrl?: string;
+  expiresAt?: string;
+  error?: string;
+}
+
+const ONRAMP_ORIGIN = 'https://onramp.arc.io';
 
 interface DepositPanelProps {
   collapsible?: boolean;
@@ -39,8 +48,8 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
   const [qr, setQr] = useState<{ address: string; url: string } | null>(null);
   const [onramp, setOnramp] = useState<OnrampInfo | null>(null);
   const [buying, setBuying] = useState(false);
-  const widgetRef = useRef<HTMLDivElement>(null);
-  const closeWidget = useRef<(() => void) | null>(null);
+  // The hosted widget's URL, once the server has minted a session
+  const [widgetUrl, setWidgetUrl] = useState<string | null>(null);
 
   const tokens = getTokens(ACTIVE_CHAIN_ID).map((t) => t.symbol);
 
@@ -58,8 +67,20 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
       .then(setOnramp, () => setOnramp({ enabled: false }));
   }, []);
 
-  // Tear the widget down when the panel closes or unmounts
-  useEffect(() => () => closeWidget.current?.(), []);
+  // The hosted widget reports progress by posting messages to this page
+  useEffect(() => {
+    if (!widgetUrl) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== ONRAMP_ORIGIN) return;
+      const raw = (e.data as { type?: unknown } | null)?.type;
+      const type = (typeof raw === 'string' ? raw : '').toLowerCase();
+      if (type.includes('settled') || type.includes('success') || type.includes('complete')) {
+        toast.success('Top-up complete — your balance will update shortly.');
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [widgetUrl]);
 
   const copy = () => {
     if (!address) return;
@@ -73,30 +94,27 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
     );
   };
 
+  // Mint a session on our server, then load Arc's hosted widget with it. The widget
+  // is an iframe on onramp.arc.io — we don't need Circle's client SDK to show it.
   const buyWithCard = async () => {
-    if (!address || !widgetRef.current) return;
+    if (!address) return;
     setBuying(true);
     try {
-      const { AppKit } = await import('@circle-fin/app-kit');
-      const kit = new AppKit();
-      const session = await kit.onramp.fetchSession({
-        url: '/api/onramp/sessions',
-        body: { appUserId: address, destinationAddress: address },
+      const res = await fetch('/api/onramp/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ appUserId: address, destinationAddress: address }),
       });
-      closeWidget.current?.();
-      const widget = kit.onramp.mountIframe({
-        session,
-        container: widgetRef.current,
-        onDepositSettled: () => toast.success('Top-up complete — your balance will update shortly.'),
-        onDepositNotCompleted: () => toast.info('Top-up not completed.'),
-      });
-      closeWidget.current = () => {
-        widget.close();
-        closeWidget.current = null;
-      };
+      const session = (await res.json().catch(() => null)) as OnrampSession | null;
+      if (!res.ok || !session?.widgetUrl) {
+        console.error('[vlora] onramp session failed', res.status, session);
+        toast.error(session?.error ?? `Couldn't start the card top-up (${res.status}). Use the deposit address instead.`);
+        return;
+      }
+      setWidgetUrl(session.widgetUrl);
     } catch (err) {
-      console.error('[vlora] onramp failed', err);
-      toast.error('Couldn\'t start the card top-up. Try the deposit address instead.');
+      console.error('[vlora] onramp session failed', err);
+      toast.error('Couldn\'t reach the top-up service. Use the deposit address instead.');
     } finally {
       setBuying(false);
     }
@@ -161,7 +179,7 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
           <div className="mt-4 border-t border-line/10 pt-4">
             {onramp?.enabled ? (
               <button
-                onClick={() => void buyWithCard()}
+                onClick={() => (widgetUrl ? setWidgetUrl(null) : void buyWithCard())}
                 disabled={buying}
                 className={cn(
                   'flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink',
@@ -169,7 +187,7 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 )}
               >
                 {buying ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
-                Buy USDC with a card
+                {widgetUrl ? 'Close top-up' : 'Buy USDC with a card'}
               </button>
             ) : (
               <p className="rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
@@ -177,8 +195,15 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 for {ACTIVE_CHAIN.name}. Until then, send {tokens[0]} to the address above from an exchange or another wallet.
               </p>
             )}
-            {/* Circle's widget renders in here; it needs an explicit height */}
-            <div ref={widgetRef} className="mt-3 w-full empty:hidden [&:not(:empty)]:h-[620px]" />
+            {/* Arc's hosted widget. It needs an explicit height or the iframe collapses. */}
+            {widgetUrl && (
+              <iframe
+                src={widgetUrl}
+                title="Buy USDC"
+                allow="payment; camera; microphone; clipboard-write; accelerometer; gyroscope"
+                className="mt-3 h-[620px] w-full rounded-xl border border-line/10 bg-white"
+              />
+            )}
           </div>
         </>
       )}
