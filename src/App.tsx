@@ -14,9 +14,10 @@ import { ChatMessage, TypingBubble, type ChatMessageData, type StepState } from 
 import { ChatInput, type SlashCommand } from './components/ChatInput';
 import { IntentPreview } from './components/IntentPreview';
 import { BalanceCard } from './components/BalanceBar';
+import { DepositPanel } from './components/DepositPanel';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -99,6 +100,7 @@ const CHAT_REPLIES = {
     '• Send USDC — "send 10 USDC to 0x…"\n' +
     '• Pay several people at once — "send 10 USDC to 0x…, 25 to 0x…" or one "0x… amount" per line\n' +
     '• Check your balance — "what\'s my balance?"\n' +
+    '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     (SWAPS_LIVE
       ? '• Swap USDC, EURC and cirBTC — "swap 10 USDC for EURC" (live quote, 0.5% max slippage)\n'
       : '• Preview a swap — "swap 50 USDC for EURC" (not executable on this network yet)\n') +
@@ -158,6 +160,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'csv', label: 'Import CSV', hint: 'Batch from a file with address, amount rows', icon: FileSpreadsheet, action: 'csv' },
   { id: 'swap', label: 'Swap', hint: 'USDC, EURC, cirBTC at a live quote', icon: ArrowUpDown, action: 'insert', template: 'Swap | USDC for EURC' },
   { id: 'balance', label: 'Check balance', hint: 'Your USDC on Arc', icon: Wallet, action: 'submit', template: "What's my balance?" },
+  { id: 'deposit', label: 'Add funds', hint: 'Your deposit address, QR code, or buy with a card', icon: ArrowDownToLine, action: 'submit', template: '/deposit' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
@@ -228,6 +231,8 @@ export default function App() {
   // address (lowercase) → "name.arc" for recipients the user typed as .arc names
   const [arcLabels, setArcLabels] = useState<Record<string, string>>({});
   const [nameRefresh, setNameRefresh] = useState(0);
+  // "/deposit" opens the Add funds panel (it starts collapsed on mobile)
+  const [depositOpen, setDepositOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -977,6 +982,19 @@ export default function App() {
   // /agent and /exit switch modes; they are handled here, never sent to the agent
   function handleModeCommand(command: string): boolean {
     const cmd = command.trim().toLowerCase();
+    if (['/deposit', '/add', '/fund', '/add funds'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setDepositOpen(true);
+      addMessage(
+        agentMsg(
+          isConnected
+            ? `Add funds is open — copy your address or scan the QR code, and send ${getTokens(ACTIVE_CHAIN_ID)[0]?.symbol ?? 'USDC'} on ${ACTIVE_CHAIN.name}. Remember gas is paid in USDC too.`
+            : 'Connect your wallet or sign in first, then open Add funds again to see your deposit address.',
+          'info',
+        ),
+      );
+      return true;
+    }
     const enter = cmd === '/agent';
     const exit = ['/exit', '/cancel', '/normal', '/cancel agent', '/exit agent'].includes(cmd);
     if (!enter && !exit) return false;
@@ -1333,6 +1351,8 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               />
             )}
 
+            {isConnected && <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />}
+
             {isConnected && !wrongChain && <AgentPanel onVaultChange={onAgentVaultChange} />}
 
             <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
@@ -1448,6 +1468,11 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                     collapsible
                     onClaim={(label, years) => setPendingIntent({ type: 'arcname', op: 'register', label, years })}
                   />
+                </div>
+              )}
+              {isConnected && (
+                <div className="mt-3">
+                  <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />
                 </div>
               )}
               {isConnected && !wrongChain && (

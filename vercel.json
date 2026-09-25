@@ -9,6 +9,9 @@
     },
     "api/gasless/check.js": {
       "maxDuration": 60
+    },
+    "api/onramp/sessions.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

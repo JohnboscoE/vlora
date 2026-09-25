@@ -41,6 +41,7 @@ export default defineConfig({
     proxy: {
       '/api/agent': 'http://localhost:8787',
       '/api/gasless': 'http://localhost:8787',
+      '/api/onramp': 'http://localhost:8787',
       // LI.FI swap quotes (mirrors vercel.json)
       '/lifi': { target: 'https://li.quest', changeOrigin: true, rewrite: (p) => p.replace(/^\/lifi/, '/v1') },
       // Same-origin RPC (mirrors the rewrites in vercel.json): ad blockers block *.arc.io
