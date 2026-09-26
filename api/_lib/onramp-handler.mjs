@@ -106,7 +106,7 @@ async function handleOnramp(route, request) {
     return json(503, { error: "Card top-ups are not configured on this server." });
   }
   const now = Date.now();
-  while (recent.length && now - recent[0] > RATE_WINDOW_MS) recent.shift();
+  while (recent.length && now - (recent[0] ?? 0) > RATE_WINDOW_MS) recent.shift();
   if (recent.length >= RATE_MAX) return json(429, { error: "Too many top-up sessions right now \u2014 try again in a minute." });
   recent.push(now);
   try {

@@ -15,9 +15,10 @@ import { ChatInput, type SlashCommand } from './components/ChatInput';
 import { IntentPreview } from './components/IntentPreview';
 import { BalanceCard } from './components/BalanceBar';
 import { DepositPanel } from './components/DepositPanel';
+import { EarnPanel } from './components/EarnPanel';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -101,6 +102,7 @@ const CHAT_REPLIES = {
     '• Pay several people at once — "send 10 USDC to 0x…, 25 to 0x…" or one "0x… amount" per line\n' +
     '• Check your balance — "what\'s my balance?"\n' +
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
+    '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
     (SWAPS_LIVE
       ? '• Swap USDC, EURC and cirBTC — "swap 10 USDC for EURC" (live quote, 0.5% max slippage)\n'
       : '• Preview a swap — "swap 50 USDC for EURC" (not executable on this network yet)\n') +
@@ -161,6 +163,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'swap', label: 'Swap', hint: 'USDC, EURC, cirBTC at a live quote', icon: ArrowUpDown, action: 'insert', template: 'Swap | USDC for EURC' },
   { id: 'balance', label: 'Check balance', hint: 'Your USDC on Arc', icon: Wallet, action: 'submit', template: "What's my balance?" },
   { id: 'deposit', label: 'Add funds', hint: 'Your deposit address, QR code, or buy with a card', icon: ArrowDownToLine, action: 'submit', template: '/deposit' },
+  { id: 'earn', label: 'Earn on idle USDC', hint: 'Deposit into a lending vault on Arc, withdraw any time', icon: PiggyBank, action: 'submit', template: '/earn' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
@@ -233,6 +236,8 @@ export default function App() {
   const [nameRefresh, setNameRefresh] = useState(0);
   // "/deposit" opens the Add funds panel (it starts collapsed on mobile)
   const [depositOpen, setDepositOpen] = useState(false);
+  // "/earn" opens the Earn panel
+  const [earnOpen, setEarnOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -982,6 +987,32 @@ export default function App() {
   // /agent and /exit switch modes; they are handled here, never sent to the agent
   function handleModeCommand(command: string): boolean {
     const cmd = command.trim().toLowerCase();
+    if (['/earn', '/invest', '/investments', '/yield', '/save'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setEarnOpen(true);
+      addMessage(
+        agentMsg(
+          isConnected
+            ? `Earn is open in the panel. It puts idle USDC into a lending vault on ${ACTIVE_CHAIN.name} — the vault holds it, not Vlora, and you can withdraw any time. Rates vary and aren't guaranteed.`
+            : 'Connect your wallet or sign in first, then open Earn again.',
+          'info',
+        ),
+      );
+      return true;
+    }
+    if (['/stocks', '/stock', '/shares', '/equities', '/crypto', '/trade', '/offramp', '/cashout', '/withdraw'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      const wantsCashOut = ['/offramp', '/cashout', '/withdraw'].includes(cmd);
+      addMessage(
+        agentMsg(
+          wantsCashOut
+            ? `Vlora can't cash out to a bank account or Cash App yet — that needs a licensed payout partner, and Arc has no off-ramp of its own. For now you can send ${getTokens(ACTIVE_CHAIN_ID)[0]?.symbol ?? 'USDC'} to an exchange that supports Arc, or swap between the stablecoins here. Type /earn to put idle USDC to work instead.`
+            : `Vlora doesn't do tokenized stocks or general crypto trading — there's no equities market on ${ACTIVE_CHAIN.name}, and that would need a licensed broker. What it does do: swap between USDC, EURC and cirBTC at a live quote ("swap 10 USDC for EURC"), and Earn, which lends idle USDC in a vault — type /earn.`,
+          'info',
+        ),
+      );
+      return true;
+    }
     if (['/deposit', '/add', '/fund', '/add funds'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setDepositOpen(true);
@@ -1353,6 +1384,8 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
 
             {isConnected && <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />}
 
+            {isConnected && <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />}
+
             {isConnected && !wrongChain && <AgentPanel onVaultChange={onAgentVaultChange} />}
 
             <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
@@ -1473,6 +1506,11 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               {isConnected && (
                 <div className="mt-3">
                   <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />
+                </div>
+              )}
+              {isConnected && (
+                <div className="mt-3">
+                  <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />
                 </div>
               )}
               {isConnected && !wrongChain && (
