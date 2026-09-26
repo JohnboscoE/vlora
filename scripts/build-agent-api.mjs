@@ -5,7 +5,7 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: { 'agent-handler': 'server/handler.ts', 'gasless-handler': 'server/gasless.ts', 'onramp-handler': 'server/onramp.ts' },
+  entryPoints: { 'agent-handler': 'server/handler.ts', 'gasless-handler': 'server/gasless.ts', 'onramp-handler': 'server/onramp.ts', 'offramp-handler': 'server/offramp.ts' },
   outdir: 'api/_lib',
   outExtension: { '.js': '.mjs' },
   bundle: true,

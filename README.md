@@ -55,6 +55,9 @@ Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (se
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
 - **Swaps** — testnet: best quote across Synthra fee tiers; mainnet: LI.FI, the aggregator behind the Arc Portal's swap page. Quotes refresh every 20s, with a 0.5% slippage guard and a re-quote just before signing. LI.FI returns a ready-made transaction, so Vlora decodes and checks it (pinned router, receiver = you, exact input, output token, on-chain minimum) before it can be signed.
 - **Gasless USDC sends** — when the server has a Circle API key, USDC sends offer a *Gasless* toggle: you sign an EIP-3009 authorization (no transaction), and [Circle's Facilitator Service](https://developers.circle.com/facilitator-service) submits it and pays the network fee. See [Gasless sends](#gasless-sends-circle-facilitator).
+- **Cash out to a bank** — `/cashout` turns USDC into naira, Kenyan shillings, Ugandan shillings or Tanzanian shillings, paid into a bank account by [Paycrest](https://paycrest.io). See [Cashing out](#cashing-out-paycrest).
+- **Earn** — `/earn` lends idle USDC in an Arc vault through Circle's App Kit; the vault holds the funds, and withdrawals are yours to make at any time.
+- **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded.
 - **Batch payments** — `send 10 USDC to 0xA, 25 to 0xB` or a CSV. One all-or-nothing transaction through `BatchSender`; rows are editable in the preview.
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
 - **Payment links** — `request 25 USDC` gives a link that prefills a send for the payer, who still reviews and signs.
@@ -217,6 +220,27 @@ USDC sends can skip the network fee: the wallet signs a `TransferWithAuthorizati
 | `CIRCLE_FACILITATOR_URL` | Optional. Defaults to `https://api.circle.com`. |
 
 Set it in `server/.env` (local, with `npm run agent`) or in Vercel's environment variables, then redeploy. `/api/gasless/info` says whether it's on (and, if not, which variable is wrong — never the key itself). If Circle rejects a send, nothing moves and the app says so; if the outcome is unclear, it watches the chain and never sends a second copy automatically.
+
+## Cashing out (Paycrest)
+
+`/cashout` sends USDC out to a bank account in local currency. Paycrest's providers pay the bank; Vlora holds nothing and signs nothing on the user's behalf.
+
+Paycrest settles on Base, Polygon, Arbitrum and a few other networks — **not on Arc yet**. So a cash-out is: create the order (`server/offramp.ts`), then bridge exactly what it asks for to the order's receive address on Base (`src/lib/bridge.ts`, Circle App Kit + CCTP). Two details keep that to a single signature on Arc:
+
+- `useForwarder` lets Circle's relayer submit the mint on Base, so the user never needs ETH there.
+- `feePayment: 'source'` charges the CCTP and forwarding fees on Arc, so the **exact** amount Paycrest quoted arrives.
+
+This detour is temporary and the app says so before you confirm. When Paycrest lists Arc — the mechanism already exists, they run Solana as a bridge rail into Base — the `NETWORK` constant in `server/offramp.ts` changes and the bridge step disappears.
+
+| Variable | What it is |
+|---|---|
+| `PAYCREST_API_KEY` | API key from a KYB-verified sender account at [app.paycrest.io](https://app.paycrest.io). Mainnet only. Unset → the panel still shows live rates and bank lookups, but can't create orders. |
+| `PAYCREST_FEE_PERCENT`, `PAYCREST_FEE_ADDRESS` | Optional fee Vlora collects, settled on-chain by Paycrest. Both or neither. |
+| `OFFRAMP_MAX_USDC` | Optional per-order ceiling, default 100 USDC. |
+
+Rates, the bank list (171 Nigerian institutions) and account-name verification come from Paycrest's public endpoints, proxied so the key is never in the browser. The server re-checks every order it gets back — right network, real address — before the app bridges anything, and refuses to bridge otherwise.
+
+One caveat worth knowing: if no payout provider takes an order, Paycrest refunds to the refund address **on Base**. That's the user's own wallet, so nothing is lost, but moving it needs a little ETH for gas. The review screen says this before you confirm.
 
 ## Mainnet
 

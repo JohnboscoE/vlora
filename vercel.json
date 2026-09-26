@@ -12,6 +12,12 @@
     },
     "api/onramp/sessions.js": {
       "maxDuration": 30
+    },
+    "api/offramp/orders.js": {
+      "maxDuration": 30
+    },
+    "api/offramp/verify.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

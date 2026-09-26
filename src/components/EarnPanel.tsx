@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ChevronDown, Loader2, PiggyBank, X } from 'lucide-react';
 import { ACTIVE_CHAIN } from '@/chain-env';
 import { depositToVault, exploreVaults, getPosition, withdrawFromVault, type EarnPosition, type EarnVault } from '@/lib/earn';
+import { recordActivity } from '@/lib/activity';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
 
@@ -84,6 +85,15 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
           : `Withdrew ${amount} ${vault.asset} from ${vault.name}.`,
       );
       console.info('[vlora] earn result', result);
+      recordActivity(address, {
+        kind: 'earn',
+        status: 'success',
+        title: kind === 'deposit' ? `Deposited ${amount} ${vault.asset} into ${vault.name}` : `Withdrew ${amount} ${vault.asset} from ${vault.name}`,
+        amount,
+        token: vault.asset,
+        counterparty: vault.address,
+        detail: `${vault.name} · ${vault.protocol} · ${pct(vault.apy)} APY`,
+      });
       setAmount('');
       setRefresh((n) => n + 1);
       void queryClient.invalidateQueries();

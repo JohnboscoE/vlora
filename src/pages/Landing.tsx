@@ -6,7 +6,7 @@ import { ACTIVE_CHAIN } from '@/chain-env';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LogoMark } from '@/components/Logo';
-import { ACTIVE_CHAIN_ID } from '@/chain-env';
+import { ACTIVE_CHAIN_ID, IS_MAINNET } from '@/chain-env';
 import { getTokens } from '@/tokens';
 import { getSwapVenue } from '@/swap-config';
 import { getBatchSenderAddress } from '@/batch-config';
@@ -48,6 +48,8 @@ const namesLive = getArcNamesAddress(ACTIVE_CHAIN_ID) != null;
 const batchLive = getBatchSenderAddress(ACTIVE_CHAIN_ID) != null;
 const swapsLive = getSwapVenue(ACTIVE_CHAIN_ID) != null;
 const agentLive = getAgentFactory(ACTIVE_CHAIN_ID) != null;
+// Cashing out and Earn are mainnet services (Paycrest settles on mainnet only)
+const cashOutLive = IS_MAINNET;
 
 const TODAY = [
   `Send ${tokenSymbols.join(', ')} to any address${namesLive ? ', contact or .arc name' : ' or contact'}`,
@@ -56,6 +58,9 @@ const TODAY = [
   ...(batchLive ? ['Batch payments: many recipients, one transaction'] : []),
   ...(swapsLive ? [`Swap ${tokenSymbols.join(', ')} at live quotes`] : []),
   ...(agentLive ? ['Agent wallet (beta): the AI pays within limits you set'] : []),
+  ...(cashOutLive ? ['Cash out to a bank account in naira, shillings and more'] : []),
+  ...(cashOutLive ? ['Earn on idle USDC in an Arc lending vault'] : []),
+  'History with a receipt you can download or share',
   'Every transaction simulated and confirmed before you sign',
 ];
 // What Vlora is built with (tools and networks, not partnerships)
@@ -114,6 +119,8 @@ const NEXT = [
   ...(!batchLive ? ['Batch payments'] : []),
   ...(!swapsLive ? ['Swaps between USDC, EURC and more'] : []),
   ...(!agentLive ? ['Agent wallet: an AI sub-account with its own signing key per user'] : []),
+  ...(!cashOutLive ? ['Cashing out to a bank account'] : []),
+  'Airtime, data and electricity bills paid from chat',
   'A directory of Arc apps you can use from chat',
 ];
 

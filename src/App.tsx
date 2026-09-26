@@ -16,9 +16,12 @@ import { IntentPreview } from './components/IntentPreview';
 import { BalanceCard } from './components/BalanceBar';
 import { DepositPanel } from './components/DepositPanel';
 import { EarnPanel } from './components/EarnPanel';
+import { OfframpPanel } from './components/OfframpPanel';
+import { HistoryPanel } from './components/HistoryPanel';
+import { recordActivity, type NewActivity } from './lib/activity';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -103,6 +106,8 @@ const CHAT_REPLIES = {
     '• Check your balance — "what\'s my balance?"\n' +
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
+    '• Cash out to a bank — "/cashout" pays USDC out in naira, shillings and more\n' +
+    '• History and receipts — "/history" lists what you\'ve done and makes a receipt for any of it\n' +
     (SWAPS_LIVE
       ? '• Swap USDC, EURC and cirBTC — "swap 10 USDC for EURC" (live quote, 0.5% max slippage)\n'
       : '• Preview a swap — "swap 50 USDC for EURC" (not executable on this network yet)\n') +
@@ -164,6 +169,8 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'balance', label: 'Check balance', hint: 'Your USDC on Arc', icon: Wallet, action: 'submit', template: "What's my balance?" },
   { id: 'deposit', label: 'Add funds', hint: 'Your deposit address, QR code, or buy with a card', icon: ArrowDownToLine, action: 'submit', template: '/deposit' },
   { id: 'earn', label: 'Earn on idle USDC', hint: 'Deposit into a lending vault on Arc, withdraw any time', icon: PiggyBank, action: 'submit', template: '/earn' },
+  { id: 'cashout', label: 'Cash out to a bank', hint: 'USDC to naira, shillings and more, paid to a bank account', icon: Banknote, action: 'submit', template: '/cashout' },
+  { id: 'history', label: 'History & receipts', hint: 'Everything you have done here, with a receipt to download', icon: History, action: 'submit', template: '/history' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
@@ -238,6 +245,9 @@ export default function App() {
   const [depositOpen, setDepositOpen] = useState(false);
   // "/earn" opens the Earn panel
   const [earnOpen, setEarnOpen] = useState(false);
+  // "/cashout" and "/history" open their panels
+  const [offrampOpen, setOfframpOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -317,11 +327,24 @@ export default function App() {
    * no step is left spinning: a revert, a tx the network never saw, and a slow
    * confirmation each get their own message.
    */
-  async function confirmTx(hash: `0x${string}`, successText: string, silentSuccess = false): Promise<ConfirmOutcome> {
+  async function confirmTx(
+    hash: `0x${string}`,
+    successText: string,
+    silentSuccess = false,
+    log?: Omit<NewActivity, 'status' | 'txHash'>,
+  ): Promise<ConfirmOutcome> {
     const explorerUrl = buildTxExplorerUrl(ACTIVE_CHAIN_ID, hash);
     setIsConfirming(true);
     try {
       const result = await watchTx(hash);
+      // What "/history" and its receipts read (src/lib/activity.ts)
+      if (log) {
+        recordActivity(address, {
+          ...log,
+          txHash: hash,
+          status: result.outcome === 'success' ? 'success' : result.outcome === 'timeout' ? 'pending' : 'failed',
+        });
+      }
       switch (result.outcome) {
         case 'success':
           if (!silentSuccess) addMessage(agentMsg(successText, 'success', { txHash: hash, explorerUrl }));
@@ -387,7 +410,13 @@ export default function App() {
 
     setStep(tracker, 0, 'done');
     setStep(tracker, 1, 'active');
-    const outcome = await confirmTx(hash, `Sent ${amountLabel} ${token.symbol}. Transaction confirmed on ${ACTIVE_CHAIN.name}.`);
+    const outcome = await confirmTx(hash, `Sent ${amountLabel} ${token.symbol}. Transaction confirmed on ${ACTIVE_CHAIN.name}.`, false, {
+      kind: 'payment',
+      title: `Sent ${amountLabel} ${token.symbol} to ${shortAddr(recipient)}`,
+      amount: amountLabel,
+      token: token.symbol,
+      counterparty: recipient,
+    });
     setStep(tracker, 1, outcomeState(outcome));
   }
 
@@ -434,7 +463,15 @@ export default function App() {
     if (result.status === 'success') {
       setStep(tracker, 1, 'done');
       setStep(tracker, 2, 'active');
-      const outcome = await confirmTx(result.transaction, successText);
+      const outcome = await confirmTx(result.transaction, successText, false, {
+        kind: 'payment',
+        title: `Sent ${amountLabel} USDC to ${shortAddr(recipient)}`,
+        amount: amountLabel,
+        token: 'USDC',
+        counterparty: recipient,
+        detail: 'Gasless — Circle paid the network fee',
+        fee: '0',
+      });
       setStep(tracker, 2, outcomeState(outcome));
       return;
     }
@@ -459,6 +496,16 @@ export default function App() {
     if (landed) {
       setStep(tracker, 1, 'done');
       setStep(tracker, 2, 'done');
+      recordActivity(address, {
+        kind: 'payment',
+        status: 'success',
+        title: `Sent ${amountLabel} USDC to ${shortAddr(recipient)}`,
+        amount: amountLabel,
+        token: 'USDC',
+        counterparty: recipient,
+        detail: 'Gasless — Circle paid the network fee',
+        fee: '0',
+      });
       addMessage(agentMsg(successText, 'success'));
       return;
     }
@@ -555,7 +602,18 @@ export default function App() {
 
     setStep(tracker, step, 'done');
     setStep(tracker, step + 1, 'active');
-    const outcome = await confirmTx(hash, `Sent ${totalLabel} USDC to ${count} recipients in one transaction on ${ACTIVE_CHAIN.name}.`);
+    const outcome = await confirmTx(
+      hash,
+      `Sent ${totalLabel} USDC to ${count} recipients in one transaction on ${ACTIVE_CHAIN.name}.`,
+      false,
+      {
+        kind: 'payment',
+        title: `Sent ${totalLabel} USDC to ${count} recipients`,
+        amount: totalLabel,
+        token: 'USDC',
+        detail: `${count} recipients in one transaction`,
+      },
+    );
     setStep(tracker, step + 1, outcomeState(outcome));
   }
 
@@ -670,7 +728,12 @@ export default function App() {
         : intent.op === 'renew'
           ? `${name} renewed for ${intent.years} more year${intent.years === 1 ? '' : 's'}.`
           : `${name} is now your primary name.`;
-    const outcome = await confirmTx(hash, successText);
+    const outcome = await confirmTx(hash, successText, false, {
+      kind: 'payment',
+      title: intent.op === 'register' ? `Registered ${name}` : intent.op === 'renew' ? `Renewed ${name}` : `Set ${name} as your primary name`,
+      ...(paid ? { amount: feeLabel, token: 'USDC' } : {}),
+      counterparty: name,
+    });
     setStep(tracker, step + 1, outcomeState(outcome));
     if (outcome === 'success') setNameRefresh((n) => n + 1);
   }
@@ -788,7 +851,13 @@ export default function App() {
 
     setStep(tracker, step, 'done');
     setStep(tracker, step + 1, 'active');
-    const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} on ${venue.name}.`);
+    const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} on ${venue.name}.`, false, {
+      kind: 'swap',
+      title: `Swapped ${inLabel} for ${tokenOut.symbol}`,
+      amount: amountIn.toString(),
+      token: tokenIn.symbol,
+      detail: `At least ${minLabel} via ${venue.name}`,
+    });
     setStep(tracker, step + 1, outcomeState(outcome));
   }
 
@@ -896,7 +965,13 @@ export default function App() {
 
     setStep(tracker, step, 'done');
     setStep(tracker, step + 1, 'active');
-    const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} (${lifi.tool} via LI.FI).`);
+    const outcome = await confirmTx(hash, `Swapped ${inLabel} for at least ${minLabel} (${lifi.tool} via LI.FI).`, false, {
+      kind: 'swap',
+      title: `Swapped ${inLabel} for ${tokenOut.symbol}`,
+      amount: amountIn.toString(),
+      token: tokenIn.symbol,
+      detail: `At least ${minLabel} via ${lifi.tool} (LI.FI)`,
+    });
     setStep(tracker, step + 1, outcomeState(outcome));
   }
 
@@ -1000,14 +1075,35 @@ export default function App() {
       );
       return true;
     }
-    if (['/stocks', '/stock', '/shares', '/equities', '/crypto', '/trade', '/offramp', '/cashout', '/withdraw'].includes(cmd)) {
+    if (['/cashout', '/cash-out', '/offramp', '/withdraw', '/bank'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      const wantsCashOut = ['/offramp', '/cashout', '/withdraw'].includes(cmd);
+      setOfframpOpen(true);
       addMessage(
         agentMsg(
-          wantsCashOut
-            ? `Vlora can't cash out to a bank account or Cash App yet — that needs a licensed payout partner, and Arc has no off-ramp of its own. For now you can send ${getTokens(ACTIVE_CHAIN_ID)[0]?.symbol ?? 'USDC'} to an exchange that supports Arc, or swap between the stablecoins here. Type /earn to put idle USDC to work instead.`
-            : `Vlora doesn't do tokenized stocks or general crypto trading — there's no equities market on ${ACTIVE_CHAIN.name}, and that would need a licensed broker. What it does do: swap between USDC, EURC and cirBTC at a live quote ("swap 10 USDC for EURC"), and Earn, which lends idle USDC in a vault — type /earn.`,
+          isConnected
+            ? 'Cash out is open in the panel. Pick an amount and a bank account, and the payout lands in local currency. Paycrest pays the bank; Vlora never holds your money.'
+            : 'Connect your wallet or sign in first, then open Cash out again.',
+          'info',
+        ),
+      );
+      return true;
+    }
+    if (['/history', '/activity', '/receipts', '/transactions'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setHistoryOpen(true);
+      addMessage(
+        agentMsg(
+          'History is open in the panel — payments, swaps, bridges, cash-outs and bills, each with a receipt you can download or share.',
+          'info',
+        ),
+      );
+      return true;
+    }
+    if (['/stocks', '/stock', '/shares', '/equities', '/crypto', '/trade'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      addMessage(
+        agentMsg(
+          `Vlora doesn't do tokenized stocks or general crypto trading — there's no equities market on ${ACTIVE_CHAIN.name}, and that would need a licensed broker. What it does do: swap between USDC, EURC and cirBTC at a live quote ("swap 10 USDC for EURC"), Earn, which lends idle USDC in a vault (/earn), and cashing out to a bank account (/cashout).`,
           'info',
         ),
       );
@@ -1386,6 +1482,10 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
 
             {isConnected && <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />}
 
+            {isConnected && <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />}
+
+            {isConnected && <HistoryPanel collapsible open={historyOpen || undefined} onOpenChange={setHistoryOpen} />}
+
             {isConnected && !wrongChain && <AgentPanel onVaultChange={onAgentVaultChange} />}
 
             <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
@@ -1511,6 +1611,16 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               {isConnected && (
                 <div className="mt-3">
                   <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />
+                </div>
+              )}
+              {isConnected && (
+                <div className="mt-3">
+                  <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />
+                </div>
+              )}
+              {isConnected && (
+                <div className="mt-3">
+                  <HistoryPanel collapsible open={historyOpen || undefined} onOpenChange={setHistoryOpen} />
                 </div>
               )}
               {isConnected && !wrongChain && (

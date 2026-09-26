@@ -14,6 +14,9 @@ Chat-style app: type a plain-English command ("send 5 USDC to 0x…", "check my 
 - Swaps: Synthra on testnet, LI.FI on mainnet (`src/lib/lifi.ts` verifies every returned transaction).
 - Gasless USDC sends via Circle's Facilitator (`server/gasless.ts`, `src/lib/gasless.ts`), on only when `CIRCLE_API_KEY` is set.
 - Every send is gated by `src/utils/validateSend.ts` (USDC only, valid address, amount > 0 and within 6 decimals, not above balance) in both the preview and at confirm time.
+- Cash out (`/cashout`): Paycrest sender API via `server/offramp.ts`, then an Arc→Base USDC bridge (`src/lib/bridge.ts`, App Kit + CCTP with `useForwarder` and `feePayment: 'source'`) into the order's receive address. Paycrest does not settle on Arc yet; when it does, change `NETWORK` in `server/offramp.ts` and drop the bridge step.
+- Earn (`/earn`): Arc lending vaults through App Kit (`src/lib/earn.ts`).
+- History (`/history`): every action is recorded in `src/lib/activity.ts` (this browser only, per wallet and network) and any entry renders a PNG receipt in `src/lib/receipt.ts`. New money-moving features should call `recordActivity` — in `App.tsx` that happens for free by passing a `log` to `confirmTx`.
 - Testnet/mainnet: flip `IS_MAINNET` in `src/chain-env.ts`; nothing else should hardcode a chain.
 
 See `PROJECT_SPEC.md` for scope and the Arc Microgrants submission plan.
