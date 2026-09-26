@@ -58,7 +58,7 @@ Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (se
 - **Cash out to a bank** — `/cashout` turns USDC into naira, Kenyan shillings, Ugandan shillings or Tanzanian shillings, paid into a bank account by [Paycrest](https://paycrest.io). See [Cashing out](#cashing-out-paycrest).
 - **Earn** — `/earn` lends idle USDC in an Arc vault through Circle's App Kit; the vault holds the funds, and withdrawals are yours to make at any time.
 - **Airtime, data and bills** — `/airtime`, `/data`, `/electricity` or `/tv` tops up a phone or pays a biller with USDC, delivered by [Bitrefill](https://www.bitrefill.com). See [Airtime and bills](#airtime-and-bills-bitrefill).
-- **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded.
+- **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded. It can also read earlier transfers back off Arc a day at a time (`src/lib/backfillHistory.ts`), for anything that happened before the log existed.
 - **Batch payments** — `send 10 USDC to 0xA, 25 to 0xB` or a CSV. One all-or-nothing transaction through `BatchSender`; rows are editable in the preview.
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
 - **Payment links** — `request 25 USDC` gives a link that prefills a send for the payer, who still reviews and signs.

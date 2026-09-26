@@ -114,9 +114,46 @@ export function updateActivity(address: string | undefined, id: string, patch: P
   save(address, entries);
 }
 
+/**
+ * Add entries read back from the chain (src/lib/backfillHistory.ts) without
+ * duplicating what is already here. A transaction this browser recorded live
+ * and the same transaction found in Arc's logs are the same event, so the
+ * hash decides: whichever arrived first stays.
+ */
+export function mergeActivity(address: string | undefined, entries: NewActivity[]): number {
+  if (!address || entries.length === 0) return 0;
+  const existing = loadActivity(address);
+  const ids = new Set(existing.map((e) => e.id));
+  const hashes = new Set(existing.map((e) => e.txHash).filter(Boolean));
+  const added: ActivityEntry[] = [];
+  for (const entry of entries) {
+    if (entry.id && ids.has(entry.id)) continue;
+    if (entry.txHash && hashes.has(entry.txHash)) continue;
+    const id = entry.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    ids.add(id);
+    if (entry.txHash) hashes.add(entry.txHash);
+    added.push({ ...entry, id, at: entry.at ?? Date.now(), chainId: ACTIVE_CHAIN_ID, chainName: ACTIVE_CHAIN.name });
+  }
+  if (added.length === 0) return 0;
+  save(address, [...added, ...existing].sort((a, b) => b.at - a.at));
+  return added.length;
+}
+
+/** The oldest block already read back from the chain for this wallet, if any */
+export function scanFloor(address: string | undefined): number | null {
+  if (!address) return null;
+  return readJson<number | null>(`${key(address)}.scan`, null);
+}
+
+export function setScanFloor(address: string | undefined, block: number): void {
+  if (!address) return;
+  writeJson(`${key(address)}.scan`, block);
+}
+
 export function clearActivity(address: string | undefined): void {
   if (!address) return;
   save(address, []);
+  writeJson(`${key(address)}.scan`, null);
 }
 
 export function explorerTxUrl(hash: string): string {

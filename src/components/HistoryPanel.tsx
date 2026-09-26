@@ -1,9 +1,21 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
-import { ChevronDown, Clock, Download, ExternalLink, Loader2, Share2, X } from 'lucide-react';
-import { ACTIVITY_LABELS, explorerTxUrl, loadActivity, subscribeActivity, type ActivityEntry, type ActivityKind } from '@/lib/activity';
+import { ChevronDown, Clock, Download, ExternalLink, History, Loader2, Share2, X } from 'lucide-react';
+import {
+  ACTIVITY_LABELS,
+  explorerTxUrl,
+  loadActivity,
+  mergeActivity,
+  scanFloor,
+  setScanFloor,
+  subscribeActivity,
+  type ActivityEntry,
+  type ActivityKind,
+} from '@/lib/activity';
+import { scanHistory, type ScanProgress } from '@/lib/backfillHistory';
 import { downloadReceipt, shareReceipt } from '@/lib/receipt';
+import { ACTIVE_CHAIN } from '@/chain-env';
 import { cn } from '@/lib/utils';
 
 interface HistoryPanelProps {
@@ -45,6 +57,42 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
   );
   const [filter, setFilter] = useState<ActivityKind | 'all'>('all');
   const [busy, setBusy] = useState<string | null>(null);
+  const [scan, setScan] = useState<ScanProgress | null>(null);
+  const cancelScan = useRef<AbortController | null>(null);
+
+  /**
+   * Read another day of transfers off Arc and fold them in. Each press
+   * continues from the oldest block already scanned, because the public RPC
+   * only answers 5,000 blocks at a time (src/lib/backfillHistory.ts).
+   */
+  const loadEarlier = async () => {
+    if (!address || scan) return;
+    const controller = new AbortController();
+    cancelScan.current = controller;
+    setScan({ done: 0, total: 0, found: 0 });
+    try {
+      const floor = scanFloor(address);
+      const result = await scanHistory(address, {
+        ...(floor ? { toBlock: BigInt(floor) } : {}),
+        days: 1,
+        onProgress: setScan,
+        signal: controller.signal,
+      });
+      const added = mergeActivity(address, result.entries);
+      if (!result.cancelled) setScanFloor(address, result.floor);
+      toast.success(
+        added > 0
+          ? `Added ${added} earlier ${added === 1 ? 'transfer' : 'transfers'} from Arc.`
+          : 'No transfers in that day. Press again to look further back.',
+      );
+    } catch (err) {
+      console.error('[vlora] history scan failed', err);
+      toast.error(err instanceof Error ? err.message : "Couldn't read your history from Arc.");
+    } finally {
+      cancelScan.current = null;
+      setScan(null);
+    }
+  };
 
   const kinds = useMemo(() => ORDER.filter((k) => entries.some((e) => e.kind === k)), [entries]);
   const shown = filter === 'all' ? entries : entries.filter((e) => e.kind === filter);
@@ -99,7 +147,8 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
 
       {entries.length === 0 ? (
         <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
-          Nothing yet. Send, swap, cash out or pay a bill and it will show up here.
+          Nothing here yet — this list starts from the moment you use Vlora. Anything you did before that is still on {' '}
+          {ACTIVE_CHAIN.name}, and the button below reads it back.
         </p>
       ) : (
         <>
@@ -184,6 +233,40 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
             and never uploaded.
           </p>
         </>
+      )}
+
+      {address && (
+        <div className="mt-3 border-t border-line/10 pt-3">
+          {scan ? (
+            <>
+              <p className="flex items-center gap-2 text-[11px] text-muted">
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                Reading {ACTIVE_CHAIN.name}
+                {scan.total > 0 ? ` — ${Math.round((scan.done / scan.total) * 100)}%` : '…'}
+                {scan.found > 0 ? ` · ${scan.found} found` : ''}
+              </p>
+              <button
+                onClick={() => cancelScan.current?.abort()}
+                className="mt-2 w-full rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink"
+              >
+                Stop
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => void loadEarlier()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink"
+              >
+                <History className="size-3.5" />
+                {scanFloor(address) ? 'Load another day from Arc' : 'Load earlier from Arc'}
+              </button>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">
+                Arc's public nodes answer 5,000 blocks at a time, so this reads one day per press and takes about half a minute.
+              </p>
+            </>
+          )}
+        </div>
       )}
     </section>
   );
