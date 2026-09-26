@@ -9,3 +9,6 @@ files.zip
 !.env.example
 !server/.env.example
 broadcast/**/dry-run/
+
+# Vercel CLI (local links and build output)
+.vercel

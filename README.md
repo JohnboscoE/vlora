@@ -57,6 +57,7 @@ Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (se
 - **Gasless USDC sends** — when the server has a Circle API key, USDC sends offer a *Gasless* toggle: you sign an EIP-3009 authorization (no transaction), and [Circle's Facilitator Service](https://developers.circle.com/facilitator-service) submits it and pays the network fee. See [Gasless sends](#gasless-sends-circle-facilitator).
 - **Cash out to a bank** — `/cashout` turns USDC into naira, Kenyan shillings, Ugandan shillings or Tanzanian shillings, paid into a bank account by [Paycrest](https://paycrest.io). See [Cashing out](#cashing-out-paycrest).
 - **Earn** — `/earn` lends idle USDC in an Arc vault through Circle's App Kit; the vault holds the funds, and withdrawals are yours to make at any time.
+- **Airtime, data and bills** — `/airtime`, `/data`, `/electricity` or `/tv` tops up a phone or pays a biller with USDC, delivered by [Bitrefill](https://www.bitrefill.com). See [Airtime and bills](#airtime-and-bills-bitrefill).
 - **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded.
 - **Batch payments** — `send 10 USDC to 0xA, 25 to 0xB` or a CSV. One all-or-nothing transaction through `BatchSender`; rows are editable in the preview.
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
@@ -241,6 +242,19 @@ This detour is temporary and the app says so before you confirm. When Paycrest l
 Rates, the bank list (171 Nigerian institutions) and account-name verification come from Paycrest's public endpoints, proxied so the key is never in the browser. The server re-checks every order it gets back — right network, real address — before the app bridges anything, and refuses to bridge otherwise.
 
 One caveat worth knowing: if no payout provider takes an order, Paycrest refunds to the refund address **on Base**. That's the user's own wallet, so nothing is lost, but moving it needs a little ETH for gas. The review screen says this before you confirm.
+
+## Airtime and bills (Bitrefill)
+
+`/airtime`, `/data`, `/electricity` and `/tv` buy a top-up or pay a biller with USDC. Bitrefill quotes the invoice, takes the payment in USDC **on Base**, and delivers straight to the phone number or meter — no code to redeem.
+
+Paying it is the same primitive as a cash-out: the invoice gives an address and an exact price, and `src/lib/bridge.ts` delivers it from the Arc wallet in one signature. `server/bills.ts` holds the key, caches the catalogue for ten minutes (Bitrefill asks integrators to cache, and their limits are tight), and checks the invoice that comes back — USDC, a real address, inside the ceiling — before the app pays anything.
+
+| Variable | What it is |
+|---|---|
+| `BITREFILL_API_KEY` | API key from [bitrefill.com/account/developers](https://www.bitrefill.com/account/developers). Mainnet only. Unset → the panel says bills aren't switched on. |
+| `BILLS_MAX_USDC` | Optional per-invoice ceiling, default 100 USDC. |
+
+Nigeria, Kenya, Ghana, Uganda, Tanzania, South Africa, the US and the UK are in the country picker; the provider list comes from Bitrefill's catalogue for that country and category, so it follows whatever they actually have in stock. A top-up can't be reversed, which the panel says next to the button — the number is checked for shape, not for who owns it.
 
 ## Mainnet
 

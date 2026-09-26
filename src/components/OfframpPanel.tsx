@@ -56,14 +56,16 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
 
   const [info, setInfo] = useState<OfframpInfo | null>(null);
   const [currency, setCurrency] = useState('NGN');
-  const [institutions, setInstitutions] = useState<Institution[]>([]);
-  const [institution, setInstitution] = useState('');
+  // Each of these is tagged with the input it was loaded for, and what the UI uses
+  // is derived below. That keeps a stale bank list, name or rate off the screen
+  // without clearing state from an effect.
+  const [bankList, setBankList] = useState<{ currency: string; list: Institution[] } | null>(null);
+  const [chosenBank, setChosenBank] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
-  const [accountName, setAccountName] = useState('');
+  const [verified, setVerified] = useState<{ key: string; name: string } | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [amount, setAmount] = useState('');
-  // Tagged with what it quoted, so a stale rate never shows against a new amount
-  const [quote, setQuote] = useState<(OfframpQuote & { for: string }) | null>(null);
+  const [quoted, setQuoted] = useState<(OfframpQuote & { for: string }) | null>(null);
   const [bridgeFee, setBridgeFee] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('form');
   const [order, setOrder] = useState<OfframpOrder | null>(null);
@@ -72,6 +74,14 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
 
   const selectedCurrency = info?.currencies.find((c) => c.code === currency);
   const symbol = selectedCurrency?.symbol ?? '';
+
+  const institutions = bankList?.currency === currency ? bankList.list : [];
+  // A bank only counts while it is in the list for the chosen currency
+  const institution = institutions.some((i) => i.code === chosenBank) ? chosenBank : '';
+  const verifyKey = `${institution}:${accountNumber}`;
+  const accountName = verified?.key === verifyKey ? verified.name : '';
+  const quoteTag = `${amount}:${currency}`;
+  const quote = quoted?.for === quoteTag ? quoted : null;
 
   useEffect(() => {
     if (!open) return;
@@ -84,12 +94,9 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
   useEffect(() => {
     if (!open || !currency) return;
     let alive = true;
-    setInstitutions([]);
-    setInstitution('');
-    setAccountName('');
     void fetchInstitutions(currency).then(
-      (list) => alive && setInstitutions(list),
-      () => alive && setInstitutions([]),
+      (list) => alive && setBankList({ currency, list }),
+      () => alive && setBankList({ currency, list: [] }),
     );
     return () => {
       alive = false;
@@ -99,16 +106,14 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
   // Live rate, debounced while the amount is being typed
   useEffect(() => {
     const value = Number(amount);
-    if (!open || !amount || !Number.isFinite(value) || value <= 0) {
-      setQuote(null);
-      return;
-    }
+    if (!open || !amount || !Number.isFinite(value) || value <= 0) return;
     const tag = `${amount}:${currency}`;
     let alive = true;
     const timer = setTimeout(() => {
       void fetchOfframpQuote(amount, currency).then(
-        (q) => alive && setQuote({ ...q, for: tag }),
-        () => alive && setQuote(null),
+        (q) => alive && setQuoted({ ...q, for: tag }),
+        // Leave the tag unmatched on failure: the derived quote stays null
+        () => undefined,
       );
     }, 350);
     return () => {
@@ -131,12 +136,12 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
 
   const verify = async () => {
     if (!institution || !accountNumber) return;
+    const key = verifyKey;
     setVerifying(true);
-    setAccountName('');
     try {
       const name = await verifyAccount(institution, accountNumber);
       // Some corridors validate the account but can't return a name
-      setAccountName(name && name !== 'OK' ? name : 'Account holder');
+      setVerified({ key, name: name && name !== 'OK' ? name : 'Account holder' });
       if (name === 'OK') toast.info("That account is valid, but this bank doesn't return the holder's name.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't check that account.");
@@ -258,7 +263,6 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
     setOrder(null);
     setEntryId(null);
     setAmount('');
-    setQuote(null);
     setStep('');
   };
 
@@ -339,10 +343,7 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
             Bank
             <select
               value={institution}
-              onChange={(e) => {
-                setInstitution(e.target.value);
-                setAccountName('');
-              }}
+              onChange={(e) => setChosenBank(e.target.value)}
               className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
             >
               <option value="">Choose a bank…</option>
@@ -357,10 +358,7 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
           <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
             <input
               value={accountNumber}
-              onChange={(e) => {
-                setAccountNumber(e.target.value.replace(/[^\d|+-]/g, ''));
-                setAccountName('');
-              }}
+              onChange={(e) => setAccountNumber(e.target.value.replace(/[^\d|+-]/g, ''))}
               inputMode="numeric"
               placeholder="Account number"
               aria-label="Account number"

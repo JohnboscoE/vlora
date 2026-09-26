@@ -60,6 +60,7 @@ const TODAY = [
   ...(agentLive ? ['Agent wallet (beta): the AI pays within limits you set'] : []),
   ...(cashOutLive ? ['Cash out to a bank account in naira, shillings and more'] : []),
   ...(cashOutLive ? ['Earn on idle USDC in an Arc lending vault'] : []),
+  ...(cashOutLive ? ['Airtime, data and electricity bills paid with USDC'] : []),
   'History with a receipt you can download or share',
   'Every transaction simulated and confirmed before you sign',
 ];
@@ -120,7 +121,7 @@ const NEXT = [
   ...(!swapsLive ? ['Swaps between USDC, EURC and more'] : []),
   ...(!agentLive ? ['Agent wallet: an AI sub-account with its own signing key per user'] : []),
   ...(!cashOutLive ? ['Cashing out to a bank account'] : []),
-  'Airtime, data and electricity bills paid from chat',
+  ...(!cashOutLive ? ['Airtime, data and electricity bills'] : []),
   'A directory of Arc apps you can use from chat',
 ];
 

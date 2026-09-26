@@ -1,22 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/agent/chat.js": {
+    "api/agent/**": {
       "maxDuration": 120
     },
-    "api/gasless/settle.js": {
+    "api/gasless/**": {
       "maxDuration": 60
     },
-    "api/gasless/check.js": {
-      "maxDuration": 60
-    },
-    "api/onramp/sessions.js": {
+    "api/onramp/**": {
       "maxDuration": 30
     },
-    "api/offramp/orders.js": {
+    "api/offramp/**": {
       "maxDuration": 30
     },
-    "api/offramp/verify.js": {
+    "api/bills/**": {
       "maxDuration": 30
     }
   },

@@ -6,6 +6,7 @@ import { handleAgent, type AgentRoute } from './handler';
 import { handleGasless, type GaslessRoute } from './gasless';
 import { handleOnramp, type OnrampRoute } from './onramp';
 import { handleOfframp, type OfframpRoute } from './offramp';
+import { handleBills, type BillsRoute } from './bills';
 import { CHAIN_ID, NETWORK_NAME } from './chain';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -13,6 +14,7 @@ const ROUTES = new Set<AgentRoute>(['info', 'nonce', 'login', 'chat']);
 const GASLESS_ROUTES = new Set<GaslessRoute>(['info', 'settle', 'check']);
 const ONRAMP_ROUTES = new Set<OnrampRoute>(['info', 'sessions']);
 const OFFRAMP_ROUTES = new Set<OfframpRoute>(['info', 'institutions', 'rate', 'verify', 'orders', 'order']);
+const BILLS_ROUTES = new Set<BillsRoute>(['info', 'products', 'product', 'invoices', 'invoice']);
 
 async function toRequest(req: IncomingMessage): Promise<Request> {
   const chunks: Buffer[] = [];
@@ -33,6 +35,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   const gaslessRoute = url.pathname.match(/^\/api\/gasless\/(\w+)$/)?.[1] as GaslessRoute | undefined;
   const onrampRoute = url.pathname.match(/^\/api\/onramp\/(\w+)$/)?.[1] as OnrampRoute | undefined;
   const offrampRoute = url.pathname.match(/^\/api\/offramp\/(\w+)$/)?.[1] as OfframpRoute | undefined;
+  const billsRoute = url.pathname.match(/^\/api\/bills\/(\w+)$/)?.[1] as BillsRoute | undefined;
   const response =
     agentRoute && ROUTES.has(agentRoute)
       ? await handleAgent(agentRoute, await toRequest(req))
@@ -42,7 +45,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           ? await handleOnramp(onrampRoute, await toRequest(req))
           : offrampRoute && OFFRAMP_ROUTES.has(offrampRoute)
             ? await handleOfframp(offrampRoute, await toRequest(req))
-            : Response.json({ error: 'not found' }, { status: 404 });
+            : billsRoute && BILLS_ROUTES.has(billsRoute)
+              ? await handleBills(billsRoute, await toRequest(req))
+              : Response.json({ error: 'not found' }, { status: 404 });
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
 }

@@ -18,10 +18,12 @@ import { DepositPanel } from './components/DepositPanel';
 import { EarnPanel } from './components/EarnPanel';
 import { OfframpPanel } from './components/OfframpPanel';
 import { HistoryPanel } from './components/HistoryPanel';
+import { BillsPanel } from './components/BillsPanel';
+import type { BillCategory } from './lib/bills';
 import { recordActivity, type NewActivity } from './lib/activity';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -107,6 +109,7 @@ const CHAT_REPLIES = {
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
     '• Cash out to a bank — "/cashout" pays USDC out in naira, shillings and more\n' +
+    '• Airtime, data and bills — "/airtime", "/data" or "/electricity" pays them with USDC\n' +
     '• History and receipts — "/history" lists what you\'ve done and makes a receipt for any of it\n' +
     (SWAPS_LIVE
       ? '• Swap USDC, EURC and cirBTC — "swap 10 USDC for EURC" (live quote, 0.5% max slippage)\n'
@@ -170,6 +173,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'deposit', label: 'Add funds', hint: 'Your deposit address, QR code, or buy with a card', icon: ArrowDownToLine, action: 'submit', template: '/deposit' },
   { id: 'earn', label: 'Earn on idle USDC', hint: 'Deposit into a lending vault on Arc, withdraw any time', icon: PiggyBank, action: 'submit', template: '/earn' },
   { id: 'cashout', label: 'Cash out to a bank', hint: 'USDC to naira, shillings and more, paid to a bank account', icon: Banknote, action: 'submit', template: '/cashout' },
+  { id: 'airtime', label: 'Airtime, data & bills', hint: 'Top up a phone or pay electricity with USDC', icon: Receipt, action: 'submit', template: '/airtime' },
   { id: 'history', label: 'History & receipts', hint: 'Everything you have done here, with a receipt to download', icon: History, action: 'submit', template: '/history' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
@@ -248,6 +252,9 @@ export default function App() {
   // "/cashout" and "/history" open their panels
   const [offrampOpen, setOfframpOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // "/airtime", "/data", "/electricity", "/tv" and "/bills" open the same panel on different tabs
+  const [billsOpen, setBillsOpen] = useState(false);
+  const [billsCategory, setBillsCategory] = useState<BillCategory>('airtime');
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -1075,6 +1082,33 @@ export default function App() {
       );
       return true;
     }
+    const billsCommands: Record<string, BillCategory> = {
+      '/airtime': 'airtime',
+      '/topup': 'airtime',
+      '/recharge': 'airtime',
+      '/data': 'data',
+      '/electricity': 'electricity',
+      '/nepa': 'electricity',
+      '/light': 'electricity',
+      '/tv': 'tv',
+      '/bills': 'electricity',
+      '/bill': 'electricity',
+      '/utilities': 'electricity',
+    };
+    if (cmd in billsCommands) {
+      addMessage(userMsg(command.trim()));
+      setBillsCategory(billsCommands[cmd] ?? 'airtime');
+      setBillsOpen(true);
+      addMessage(
+        agentMsg(
+          isConnected
+            ? 'Airtime and bills are open in the panel. Pick a provider and an amount, enter the phone or meter number, and it is paid with your USDC — Bitrefill delivers it.'
+            : 'Connect your wallet or sign in first, then open Airtime & bills again.',
+          'info',
+        ),
+      );
+      return true;
+    }
     if (['/cashout', '/cash-out', '/offramp', '/withdraw', '/bank'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setOfframpOpen(true);
@@ -1484,6 +1518,10 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
 
             {isConnected && <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />}
 
+            {isConnected && (
+              <BillsPanel collapsible open={billsOpen || undefined} onOpenChange={setBillsOpen} category={billsCategory} />
+            )}
+
             {isConnected && <HistoryPanel collapsible open={historyOpen || undefined} onOpenChange={setHistoryOpen} />}
 
             {isConnected && !wrongChain && <AgentPanel onVaultChange={onAgentVaultChange} />}
@@ -1616,6 +1654,11 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               {isConnected && (
                 <div className="mt-3">
                   <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />
+                </div>
+              )}
+              {isConnected && (
+                <div className="mt-3">
+                  <BillsPanel collapsible open={billsOpen || undefined} onOpenChange={setBillsOpen} category={billsCategory} />
                 </div>
               )}
               {isConnected && (
