@@ -81,6 +81,10 @@ export const createBillInvoice = (input: CreateInvoiceInput) =>
     body: JSON.stringify(input),
   });
 
+/** Which networks serve a phone number, so a top-up doesn't have to ask */
+export const fetchPhoneOperators = (number: string) =>
+  call<{ number: string; operators: { id: string; name: string }[] }>(`phone?number=${encodeURIComponent(number)}`).then((r) => r.operators);
+
 export const fetchBillInvoice = (id: string) =>
   call<{ invoice: BillInvoice }>(`invoice?id=${encodeURIComponent(id)}`).then((r) => r.invoice);
 

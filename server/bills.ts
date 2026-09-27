@@ -13,7 +13,7 @@
 import { isAddress } from 'viem';
 import { CHAIN_ID } from './chain';
 
-export type BillsRoute = 'info' | 'products' | 'product' | 'invoices' | 'invoice';
+export type BillsRoute = 'info' | 'products' | 'product' | 'invoices' | 'invoice' | 'phone';
 
 const API = 'https://api.bitrefill.com/v2';
 /** The only payment method we use: USDC on Base, an ordinary transfer to an address */
@@ -58,7 +58,7 @@ function configProblem(): string | null {
 // catalogue, 60 per 10 minutes on a single invoice).
 const recent = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
-const RATE_MAX: Record<string, number> = { products: 40, product: 40, invoices: 10, invoice: 40 };
+const RATE_MAX: Record<string, number> = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10 };
 
 function rateLimited(route: string): boolean {
   const now = Date.now();
@@ -249,6 +249,21 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
     const product = toProduct(body.data);
     if (status !== 200 || !product) return json(502, { error: problemText(body, status) });
     return json(200, { product });
+  }
+
+  if (route === 'phone') {
+    const number = str(url.searchParams.get('number')).replace(/[\s()-]/g, '');
+    if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: 'that does not look like a phone number' });
+    const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+    if (status !== 200) return json(status === 429 ? 429 : 502, { error: problemText(body, status) });
+    const data = body.data as { phone_number?: string; operators?: unknown[] } | undefined;
+    const operators = (Array.isArray(data?.operators) ? data.operators : [])
+      .map((o) => {
+        const row = o as Record<string, unknown>;
+        return { id: str(row.id), name: str(row.name) || str(row.id) };
+      })
+      .filter((o) => o.id !== '');
+    return json(200, { number: str(data?.phone_number) || number, operators });
   }
 
   if (route === 'invoice') {

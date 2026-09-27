@@ -3,11 +3,10 @@ import { useAccount, useSwitchChain } from 'wagmi';
 import { toast } from 'sonner';
 import { ChevronDown, Loader2, Receipt, X } from 'lucide-react';
 import { ACTIVE_CHAIN, ACTIVE_CHAIN_ID } from '@/chain-env';
-import { BRIDGE_CHAIN_LABEL, bridgeOut } from '@/lib/bridge';
+import { BRIDGE_CHAIN_LABEL } from '@/lib/bridge';
+
 import {
-  amountToPay,
   BILL_CATEGORY_LABELS,
-  createBillInvoice,
   describeInvoiceStatus,
   fetchBillProduct,
   fetchBillProducts,
@@ -20,7 +19,8 @@ import {
   type BillProduct,
   type BillsInfo,
 } from '@/lib/bills';
-import { recordActivity, updateActivity } from '@/lib/activity';
+import { updateActivity } from '@/lib/activity';
+import { runBillPayment } from '@/lib/runMoney';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
 
@@ -141,55 +141,38 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
 
   const ready = isConnected && !!address && !!product && (!!packageId || (!!value && !amountProblem)) && recipient.length >= 4;
 
+  // The panel and the typed command ("buy 500 airtime for 0801…") run exactly
+  // the same code — see src/lib/runMoney.ts.
   const pay = async () => {
     if (!ready || !address || !product) return;
     setStage('working');
-    let id: string | null = null;
-    let created: Awaited<ReturnType<typeof createBillInvoice>> | null = null;
+    let run: Awaited<ReturnType<typeof runBillPayment>> | null = null;
     try {
       if (chainId !== ACTIVE_CHAIN_ID) {
         setStep(`Switching your wallet to ${ACTIVE_CHAIN.name}…`);
         await switchChainAsync({ chainId: ACTIVE_CHAIN_ID });
       }
-
-      setStep('Getting a price from Bitrefill…');
-      created = await createBillInvoice({
-        productId: product.id,
-        ...(packageId ? { packageId } : { value }),
-        recipient,
-        refundAddress: address,
-      });
-
-      const total = amountToPay(created.payment.price);
       const chosen = packageId ? (product.packages.find((p) => p.id === packageId)?.value ?? '') : value;
-      const what = `${product.name}${chosen ? ` ${chosen} ${product.currency}` : ''}`;
-      id = recordActivity(address, {
-        kind: category === 'airtime' || category === 'data' ? 'airtime' : 'utilities',
-        status: 'pending',
-        title: `Paid ${what} for ${recipient}`,
-        amount: total,
-        token: 'USDC',
-        counterparty: recipient,
-        detail: `${BILL_CATEGORY_LABELS[category]} · ${product.name} · ${product.country}`,
-        ...(chosen ? { fiat: { currency: product.currency, amount: chosen } } : {}),
-        reference: created.id,
-      });
-      setEntryId(id);
-      setInvoice(created.invoice);
-
-      setStep(`Paying ${total} USDC on ${BRIDGE_CHAIN_LABEL}…`);
-      const result = await bridgeOut(created.payment.address, total);
-      if (result.state === 'error') throw new Error('The payment did not complete. Nothing was delivered.');
-      if (result.sourceTxHash) updateActivity(address, id, { txHash: result.sourceTxHash });
-
+      run = await runBillPayment(
+        address,
+        {
+          category,
+          product,
+          ...(packageId ? { packageId } : { value }),
+          recipient,
+          label: `${chosen ? `${chosen} ${product.currency} of ` : ''}${product.name}`,
+        },
+        setStep,
+      );
+      setEntryId(run.entryId);
+      setInvoice(run.invoice);
       setStage('tracking');
       setStep('');
       toast.success('Paid. Bitrefill is delivering it now.');
     } catch (err) {
       console.error('[vlora] bill payment failed', err);
-      if (id) updateActivity(address, id, { status: 'failed' });
       toast.error(describeWalletError(err));
-      setStage(created ? 'tracking' : 'form');
+      setStage(run ? 'tracking' : 'form');
     }
   };
 

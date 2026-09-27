@@ -2,7 +2,7 @@
 // deployment can only carry so many; logic lives in server/bills.ts (bundled to api/_lib).
 import { handleBills } from '../_lib/bills-handler.mjs';
 
-const ROUTES = new Set(['info', 'products', 'product', 'invoices', 'invoice']);
+const ROUTES = new Set(['info', 'products', 'product', 'invoices', 'invoice', 'phone']);
 
 export default {
   fetch(request) {

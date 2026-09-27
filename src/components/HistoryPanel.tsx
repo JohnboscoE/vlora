@@ -26,6 +26,9 @@ interface HistoryPanelProps {
 
 const ORDER: ActivityKind[] = ['payment', 'swap', 'bridge', 'cashout', 'airtime', 'utilities', 'earn', 'deposit'];
 
+/** "4 min" / "40 sec", for the progress line */
+const formatLeft = (seconds: number) => (seconds >= 90 ? `${Math.round(seconds / 60)} min` : `${seconds} sec`);
+
 const when = (at: number) => {
   const date = new Date(at);
   const today = new Date();
@@ -61,29 +64,35 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
   const cancelScan = useRef<AbortController | null>(null);
 
   /**
-   * Read another day of transfers off Arc and fold them in. Each press
-   * continues from the oldest block already scanned, because the public RPC
-   * only answers 5,000 blocks at a time (src/lib/backfillHistory.ts).
+   * Read this wallet's whole history off Arc in one press. The scan finds where
+   * the wallet's history begins and works through everything since, adding rows
+   * as it finds them (src/lib/backfillHistory.ts). Stopping keeps what it found,
+   * and the next press carries on from there.
    */
   const loadEarlier = async () => {
     if (!address || scan) return;
     const controller = new AbortController();
     cancelScan.current = controller;
-    setScan({ done: 0, total: 0, found: 0 });
+    setScan({ done: 0, total: 0, found: 0, secondsLeft: null });
+    let added = 0;
     try {
       const floor = scanFloor(address);
       const result = await scanHistory(address, {
+        // A resumed scan carries on below the oldest block already covered
         ...(floor ? { toBlock: BigInt(floor) } : {}),
-        days: 1,
         onProgress: setScan,
+        onEntries: (found) => {
+          added += mergeActivity(address, found);
+        },
         signal: controller.signal,
       });
-      const added = mergeActivity(address, result.entries);
       if (!result.cancelled) setScanFloor(address, result.floor);
       toast.success(
         added > 0
-          ? `Added ${added} earlier ${added === 1 ? 'transfer' : 'transfers'} from Arc.`
-          : 'No transfers in that day. Press again to look further back.',
+          ? `Added ${added} ${added === 1 ? 'transfer' : 'transfers'} from ${ACTIVE_CHAIN.name}.`
+          : result.cancelled
+            ? 'Stopped.'
+            : 'Nothing earlier to find — your history is complete.',
       );
     } catch (err) {
       console.error('[vlora] history scan failed', err);
@@ -241,9 +250,11 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
             <>
               <p className="flex items-center gap-2 text-[11px] text-muted">
                 <Loader2 className="size-3.5 shrink-0 animate-spin" />
-                Reading {ACTIVE_CHAIN.name}
-                {scan.total > 0 ? ` — ${Math.round((scan.done / scan.total) * 100)}%` : '…'}
+                {scan.total === 0
+                  ? `Finding where your history starts on ${ACTIVE_CHAIN.name}…`
+                  : `Reading ${ACTIVE_CHAIN.name} — ${Math.round((scan.done / scan.total) * 100)}%`}
                 {scan.found > 0 ? ` · ${scan.found} found` : ''}
+                {scan.secondsLeft != null && scan.secondsLeft > 5 ? ` · ${formatLeft(scan.secondsLeft)} left` : ''}
               </p>
               <button
                 onClick={() => cancelScan.current?.abort()}
@@ -259,10 +270,11 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink"
               >
                 <History className="size-3.5" />
-                {scanFloor(address) ? 'Load another day from Arc' : 'Load earlier from Arc'}
+                {scanFloor(address) ? 'Keep reading older history' : 'Load my history from Arc'}
               </button>
               <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">
-                Arc's public nodes answer 5,000 blocks at a time, so this reads one day per press and takes about half a minute.
+                Reads every transfer this wallet has made or received. Arc's public nodes answer 5,000 blocks at a time, so a long history
+                takes a few minutes — rows appear as they are found, and you can stop whenever.
               </p>
             </>
           )}

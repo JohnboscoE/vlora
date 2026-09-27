@@ -233,7 +233,12 @@ async function handleOfframp(route, request) {
   });
   if (status !== 201 && status !== 200) {
     console.error("[offramp] create failed", status, body.message);
-    return json(status === 401 || status === 403 ? 503 : 400, { error: problemText(body) });
+    if (status === 401 || status === 403) {
+      return json(503, {
+        error: `Paycrest won't take orders from this account yet (${problemText(body)}). That's their verification, not your wallet \u2014 nothing was sent.`
+      });
+    }
+    return json(400, { error: problemText(body) });
   }
   const wrong = depositProblem(body.data);
   if (wrong) {

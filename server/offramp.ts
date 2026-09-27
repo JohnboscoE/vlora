@@ -250,7 +250,14 @@ export async function handleOfframp(route: OfframpRoute, request: Request): Prom
 
   if (status !== 201 && status !== 200) {
     console.error('[offramp] create failed', status, body.message);
-    return json(status === 401 || status === 403 ? 503 : 400, { error: problemText(body) });
+    // 401/403 here is the sender account, not the request: the key is accepted for
+    // public data but can't create orders until Paycrest has finished KYB.
+    if (status === 401 || status === 403) {
+      return json(503, {
+        error: `Paycrest won't take orders from this account yet (${problemText(body)}). That's their verification, not your wallet — nothing was sent.`,
+      });
+    }
+    return json(400, { error: problemText(body) });
   }
 
   // The response decides where the user's money goes, so check it before the app

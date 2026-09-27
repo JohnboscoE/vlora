@@ -3,23 +3,22 @@ import { useAccount, useSwitchChain } from 'wagmi';
 import { toast } from 'sonner';
 import { Banknote, Check, ChevronDown, Loader2, X } from 'lucide-react';
 import { ACTIVE_CHAIN, ACTIVE_CHAIN_ID } from '@/chain-env';
-import { BRIDGE_CHAIN_LABEL, bridgeOut, estimateBridgeOut } from '@/lib/bridge';
+import { BRIDGE_CHAIN_LABEL, estimateBridgeOut } from '@/lib/bridge';
 import {
-  createOfframpOrder,
   describeOrderStatus,
   fetchInstitutions,
   fetchOfframpInfo,
   fetchOfframpOrder,
   fetchOfframpQuote,
   isFinalStatus,
-  orderTotal,
   verifyAccount,
   type Institution,
   type OfframpInfo,
   type OfframpOrder,
   type OfframpQuote,
 } from '@/lib/offramp';
-import { recordActivity, updateActivity } from '@/lib/activity';
+import { updateActivity } from '@/lib/activity';
+import { runCashOut } from '@/lib/runMoney';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
 
@@ -164,70 +163,42 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
     );
   };
 
+  // The panel and the typed command ("cash out 20 USDC to gtbank 0123456789")
+  // run exactly the same code — see src/lib/runMoney.ts.
   const confirm = async () => {
-    if (!ready || !address || !info) return;
+    if (!ready || !address || !info || !quote) return;
     setStage('working');
-    let id: string | null = null;
-    let created: OfframpOrder | null = null;
+    let run: Awaited<ReturnType<typeof runCashOut>> | null = null;
     try {
       if (chainId !== ACTIVE_CHAIN_ID) {
         setStep(`Switching your wallet to ${ACTIVE_CHAIN.name}…`);
         await switchChainAsync({ chainId: ACTIVE_CHAIN_ID });
       }
-
-      setStep('Getting a payout quote…');
-      created = await createOfframpOrder({
-        amount,
-        currency,
-        institution,
-        accountIdentifier: accountNumber,
-        accountName,
-        // Refunds go back on the settlement network, so this is the user's own address there
-        refundAddress: address,
-        providerIds: quote?.providerIds,
-      });
-      setOrder(created);
-
-      // The order decides how much leaves the wallet, so check it against what the
-      // user actually agreed to before bridging. Fees are cents; anything beyond a
-      // few percent means we are not looking at the order we asked for.
-      const total = orderTotal(created);
-      if (Number(created.amount) !== Number(amount) || Number(total) > Number(amount) * 1.05) {
-        throw new Error(`The payout quote came back as ${total} USDC instead of ${amount}. Nothing was sent.`);
-      }
-      const quoted = created.providerAccount.amountToTransfer;
-      if (quoted && Math.abs(Number(quoted) - Number(total)) > 1e-6) {
-        throw new Error(`The payout account asked for ${quoted} USDC, not ${total}. Nothing was sent.`);
-      }
-      const bankName = institutions.find((i) => i.code === institution)?.name ?? institution;
-      id = recordActivity(address, {
-        kind: 'cashout',
-        status: 'pending',
-        title: `Cashed out ${amount} USDC to ${bankName}`,
-        amount: total,
-        token: 'USDC',
-        counterparty: accountNumber,
-        detail: `${bankName} · ${accountName}`,
-        fiat: { currency, amount: (Number(created.amount) * Number(created.rate)).toFixed(2), rate: created.rate },
-        fee: (Number(total) - Number(created.amount)).toFixed(6).replace(/\.?0+$/, ''),
-        reference: created.id,
-      });
-      setEntryId(id);
-
-      setStep(`Sending ${total} USDC to the payout account on ${BRIDGE_CHAIN_LABEL}…`);
-      const result = await bridgeOut(created.providerAccount.receiveAddress, total);
-      if (result.state === 'error') throw new Error('The transfer did not complete. Nothing was paid out.');
-      if (result.sourceTxHash) updateActivity(address, id, { txHash: result.sourceTxHash });
-
+      run = await runCashOut(
+        address,
+        {
+          amount,
+          currency,
+          institution,
+          bankName: institutions.find((i) => i.code === institution)?.name ?? institution,
+          accountNumber,
+          accountName,
+          rate: quote.rate,
+          payout: (Number(amount) * Number(quote.rate)).toFixed(2),
+          providerIds: quote.providerIds,
+        },
+        setStep,
+      );
+      setOrder(run.order);
+      setEntryId(run.entryId);
       setStage('tracking');
       setStep('');
       toast.success('Sent. Your bank payout is on its way.');
     } catch (err) {
       console.error('[vlora] cash out failed', err);
-      if (id) updateActivity(address, id, { status: 'failed' });
       toast.error(describeWalletError(err));
-      // An order that was created is still worth watching: it either gets funded or expires
-      setStage(created ? 'tracking' : 'form');
+      // An order that was created is still worth watching: it gets funded or expires
+      setStage(run ? 'tracking' : 'form');
     }
   };
 

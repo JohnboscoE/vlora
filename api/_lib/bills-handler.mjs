@@ -94,7 +94,7 @@ function configProblem() {
 }
 var recent = /* @__PURE__ */ new Map();
 var RATE_WINDOW_MS = 6e4;
-var RATE_MAX = { products: 40, product: 40, invoices: 10, invoice: 40 };
+var RATE_MAX = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10 };
 function rateLimited(route) {
   const now = Date.now();
   const hits = (recent.get(route) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -209,6 +209,18 @@ async function handleBills(route, request) {
     const product = toProduct(body2.data);
     if (status2 !== 200 || !product) return json(502, { error: problemText(body2, status2) });
     return json(200, { product });
+  }
+  if (route === "phone") {
+    const number = str(url.searchParams.get("number")).replace(/[\s()-]/g, "");
+    if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: "that does not look like a phone number" });
+    const { status: status2, body: body2 } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+    if (status2 !== 200) return json(status2 === 429 ? 429 : 502, { error: problemText(body2, status2) });
+    const data = body2.data;
+    const operators = (Array.isArray(data?.operators) ? data.operators : []).map((o) => {
+      const row = o;
+      return { id: str(row.id), name: str(row.name) || str(row.id) };
+    }).filter((o) => o.id !== "");
+    return json(200, { number: str(data?.phone_number) || number, operators });
   }
   if (route === "invoice") {
     const id = str(url.searchParams.get("id"));

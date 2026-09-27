@@ -20,6 +20,10 @@ import { OfframpPanel } from './components/OfframpPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { BillsPanel } from './components/BillsPanel';
 import type { BillCategory } from './lib/bills';
+import { MoneyConfirm, type MoneyPlan } from './components/MoneyConfirm';
+import { parseBill, parseCashOut } from './utils/moneyIntent';
+import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
+import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -108,8 +112,8 @@ const CHAT_REPLIES = {
     '• Check your balance — "what\'s my balance?"\n' +
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
-    '• Cash out to a bank — "/cashout" pays USDC out in naira, shillings and more\n' +
-    '• Airtime, data and bills — "/airtime", "/data" or "/electricity" pays them with USDC\n' +
+    '• Cash out to a bank — "cash out 20 USDC to gtbank 0123456789" (or "/cashout" to browse)\n' +
+    '• Airtime, data and bills — "buy 500 airtime for 08012345678", "pay 5000 electricity for meter 04123456789"\n' +
     '• History and receipts — "/history" lists what you\'ve done and makes a receipt for any of it\n' +
     (SWAPS_LIVE
       ? '• Swap USDC, EURC and cirBTC — "swap 10 USDC for EURC" (live quote, 0.5% max slippage)\n'
@@ -214,7 +218,7 @@ const WELCOME: ChatMessageData = agentMsg(
 
 export default function App() {
   const { address, chainId, isConnected } = useAccount();
-  const { switchChain } = useSwitchChain();
+  const { switchChain, switchChainAsync } = useSwitchChain();
   const [messages, setMessages] = useState<ChatMessageData[]>([WELCOME]);
   const [pendingIntent, setPendingIntent] = useState<ParsedIntent | null>(null);
   // Agent wallet (testnet beta): when agent mode is on, messages go to the agent server
@@ -255,6 +259,10 @@ export default function App() {
   // "/airtime", "/data", "/electricity", "/tv" and "/bills" open the same panel on different tabs
   const [billsOpen, setBillsOpen] = useState(false);
   const [billsCategory, setBillsCategory] = useState<BillCategory>('airtime');
+  // A cash-out or bill typed into the chat, resolved and waiting for one press
+  const [pendingMoney, setPendingMoney] = useState<MoneyPlan | null>(null);
+  const [moneyBusy, setMoneyBusy] = useState(false);
+  const [moneyStep, setMoneyStep] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -1203,10 +1211,85 @@ export default function App() {
     return true;
   }
 
+  /**
+   * "cash out 20 USDC to gtbank 0123456789" and "buy 500 airtime for 0801…".
+   * Vlora is meant to be typed at, so these resolve the bank or the operator
+   * against the live APIs and put one confirmation in front of the user,
+   * instead of sending them to a form.
+   */
+  async function handleMoneyMessage(text: string): Promise<boolean> {
+    const cashOut = parseCashOut(text);
+    const bill = cashOut ? null : parseBill(text);
+    if (!cashOut && !bill) return false;
+
+    addMessage(userMsg(text));
+    if (!isConnected || !address) {
+      addMessage(agentMsg('Connect your wallet or sign in first, then say that again.', 'info'));
+      return true;
+    }
+
+    setPendingMoney(null);
+    thinkingRef.current = true;
+    setIsThinking(true);
+    try {
+      const plan: MoneyPlan = cashOut
+        ? { kind: 'cashout', plan: await resolveCashOut(cashOut) }
+        : { kind: 'bill', plan: await resolveBill(bill!) };
+      setPendingMoney(plan);
+      addMessage(
+        agentMsg(
+          plan.kind === 'cashout'
+            ? `${plan.plan.accountName} at ${plan.plan.bankName} would receive ${Number(plan.plan.payout).toLocaleString()} ${plan.plan.currency}. Check it and confirm below.`
+            : `${plan.plan.label} for ${plan.plan.recipient}. Check the number and confirm below.`,
+          'info',
+        ),
+      );
+    } catch (err) {
+      console.error('[vlora] money intent failed', err);
+      addMessage(agentMsg(err instanceof Error ? err.message : "I couldn't set that up.", 'error'));
+    } finally {
+      thinkingRef.current = false;
+      setIsThinking(false);
+    }
+    return true;
+  }
+
+  async function runPendingMoney() {
+    if (!pendingMoney || !address) return;
+    setMoneyBusy(true);
+    try {
+      if (chainId !== ACTIVE_CHAIN_ID) {
+        setMoneyStep(`Switching your wallet to ${ACTIVE_CHAIN.name}…`);
+        await switchChainAsync({ chainId: ACTIVE_CHAIN_ID });
+      }
+      if (pendingMoney.kind === 'cashout') {
+        const { order } = await runCashOut(address, pendingMoney.plan, setMoneyStep);
+        addMessage(
+          agentMsg(
+            `Sent. ${pendingMoney.plan.bankName} should have it within a couple of minutes — reference ${order.id.slice(0, 8)}. "/history" has the receipt.`,
+            'success',
+          ),
+        );
+      } else {
+        await runBillPayment(address, pendingMoney.plan, setMoneyStep);
+        addMessage(agentMsg(`Paid. ${pendingMoney.plan.label} is on its way to ${pendingMoney.plan.recipient}. "/history" has the receipt.`, 'success'));
+      }
+      setPendingMoney(null);
+      void queryClient.invalidateQueries();
+    } catch (err) {
+      console.error('[vlora] money run failed', err);
+      addMessage(agentMsg(describeWalletError(err), 'error'));
+    } finally {
+      setMoneyBusy(false);
+      setMoneyStep('');
+    }
+  }
+
   async function handleUserMessage(text: string) {
     if (thinkingRef.current) return;
     if (handleModeCommand(text)) return;
     if (agentMode && agentVault?.active) return handleAgentMessage(text);
+    if (await handleMoneyMessage(text)) return;
     addMessage(userMsg(text));
 
     // Show the typing bubble for at least THINK_MS so replies don't feel instant/robotic
@@ -1744,6 +1827,24 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
           </div>
         </main>
       </div>
+
+      {/* Typed cash-outs and bills confirm here, like any other transaction */}
+      <AnimatePresence>
+        {pendingMoney && (
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-2xl p-3 md:p-4">
+            <MoneyConfirm
+              pending={pendingMoney}
+              onConfirm={() => void runPendingMoney()}
+              onCancel={() => {
+                setPendingMoney(null);
+                addMessage(agentMsg('Cancelled — nothing was sent.', 'info'));
+              }}
+              busy={moneyBusy}
+              step={moneyStep}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Intent confirmation sheet */}
       <AnimatePresence>
