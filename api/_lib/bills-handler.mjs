@@ -163,11 +163,12 @@ function paymentProblem(invoice, max = maxUsdc()) {
   const address = str(payment?.address);
   const price = Number(payment?.price);
   const currency = str(payment?.currency).toUpperCase();
+  const quoted = `${str(payment?.price) || String(payment?.price ?? "?")} ${currency || "(no currency)"} by ${str(payment?.method) || "unknown method"}`;
   if (!id) return { problem: "the invoice has no id" };
   if (!isAddress(address)) return { problem: "the payment address is not an address" };
-  if (!Number.isFinite(price) || price <= 0) return { problem: "the invoice has no price" };
-  if (price > max) return { problem: `the invoice asks for ${price} USDC, above the ${max} USDC limit` };
-  if (currency && currency !== "USDC") return { problem: `the invoice is priced in ${currency}, not USDC` };
+  if (!Number.isFinite(price) || price <= 0) return { problem: `the invoice has no usable price (${quoted})` };
+  if (currency && currency !== "USDC") return { problem: `the invoice is priced in ${quoted}, not USDC` };
+  if (price > max) return { problem: `the invoice asks for ${quoted}, above the ${max} USDC limit` };
   return { id, payment: { address, price: String(payment?.price), currency: currency || "USDC" } };
 }
 async function billProducts(category, country) {
@@ -215,6 +216,8 @@ async function createInvoice(request) {
     console.error("[bills] invoice failed", status, body.message ?? body.error);
     return { problem: problemText(body, status), status: status === 401 || status === 403 ? 503 : 400 };
   }
+  const raw = body.data?.payment;
+  console.info("[bills] invoice payment", JSON.stringify(raw));
   const verdict = paymentProblem(body.data);
   if ("problem" in verdict) {
     console.error(`[bills] unusable invoice: ${verdict.problem}`);

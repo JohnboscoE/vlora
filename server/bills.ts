@@ -193,11 +193,16 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
   const price = Number(payment?.price);
   const currency = str(payment?.currency).toUpperCase();
 
+  // Say what Bitrefill actually sent, so a refusal is diagnosable instead of mysterious
+  const quoted = `${str(payment?.price) || String(payment?.price ?? '?')} ${currency || '(no currency)'} by ${str(payment?.method) || 'unknown method'}`;
+
   if (!id) return { problem: 'the invoice has no id' };
   if (!isAddress(address)) return { problem: 'the payment address is not an address' };
-  if (!Number.isFinite(price) || price <= 0) return { problem: 'the invoice has no price' };
-  if (price > max) return { problem: `the invoice asks for ${price} USDC, above the ${max} USDC limit` };
-  if (currency && currency !== 'USDC') return { problem: `the invoice is priced in ${currency}, not USDC` };
+  if (!Number.isFinite(price) || price <= 0) return { problem: `the invoice has no usable price (${quoted})` };
+  // Currency first: a price in the wrong unit reads as an absurd amount, and
+  // knowing which unit it is beats being told the number is too big
+  if (currency && currency !== 'USDC') return { problem: `the invoice is priced in ${quoted}, not USDC` };
+  if (price > max) return { problem: `the invoice asks for ${quoted}, above the ${max} USDC limit` };
   return { id, payment: { address, price: String(payment?.price), currency: currency || 'USDC' } };
 }
 
@@ -261,6 +266,10 @@ export async function createInvoice(
     console.error('[bills] invoice failed', status, body.message ?? body.error);
     return { problem: problemText(body, status), status: status === 401 || status === 403 ? 503 : 400 };
   }
+  // Log the payment block verbatim: it decides what gets paid, and its units have
+  // to be read from what Bitrefill sends rather than assumed
+  const raw = (body.data as { payment?: unknown } | undefined)?.payment;
+  console.info('[bills] invoice payment', JSON.stringify(raw));
   // The invoice says where the money goes, so check it before anything is paid
   const verdict = paymentProblem(body.data);
   if ('problem' in verdict) {
