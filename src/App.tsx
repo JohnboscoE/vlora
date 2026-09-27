@@ -25,6 +25,7 @@ import { parseBill, parseCashOut } from './utils/moneyIntent';
 import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
 import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
+import { watchPendingActivity } from './lib/watchPending';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
 import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt } from 'lucide-react';
@@ -268,6 +269,11 @@ export default function App() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
+
+  // Bills and cash-outs settle at the provider after the money moves, so
+  // anything still "in progress" — including from an earlier visit — is followed
+  // until it finishes (src/lib/watchPending.ts)
+  useEffect(() => watchPendingActivity(address), [address]);
 
   /**
    * Which panel the phone shows over the chat. Only one at a time, and only when
