@@ -28,6 +28,9 @@ export interface AgentVaultState {
 interface AgentPanelProps {
   onVaultChange: (state: AgentVaultState | null) => void;
   collapsible?: boolean;
+  /** Controlled from outside, e.g. "/agent wallet" or the mobile sheet */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const DAY = 24 * 60 * 60;
@@ -36,13 +39,18 @@ const DAY = 24 * 60 * 60;
  * Create, fund and control an agent wallet. Everything here is signed by the
  * owner; only the agent's own actions (in agent mode) skip the owner's signature.
  */
-export function AgentPanel({ onVaultChange, collapsible = false }: AgentPanelProps) {
+export function AgentPanel({ onVaultChange, collapsible = false, open: openProp, onOpenChange }: AgentPanelProps) {
   const { address, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const factory = getAgentFactory(ACTIVE_CHAIN_ID);
   const tokens = getAgentTokens(ACTIVE_CHAIN_ID);
   const { writeContractAsync } = useWriteContract();
-  const [open, setOpen] = useState(!collapsible);
+  const [openSelf, setOpenSelf] = useState(!collapsible);
+  const open = openProp ?? openSelf;
+  const setOpen = (next: boolean) => {
+    setOpenSelf(next);
+    onOpenChange?.(next);
+  };
   const [agentAddress, setAgentAddress] = useState<`0x${string}` | null | undefined>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
   // Re-evaluates expiry once a minute without calling Date.now() during render

@@ -50,6 +50,48 @@ describe('RecipientGuard — recipients must come from the owner, not the model'
   });
 });
 
+describe('RecipientGuard — phone and meter numbers', () => {
+  // A bill is delivered to a number, so the number is the recipient: text the agent
+  // merely read must never be able to choose whose phone gets topped up.
+  it('allows a number the owner typed', () => {
+    const guard = new RecipientGuard('buy 500 airtime for 08031234567');
+    expect(guard.typedNumber('08031234567')).toBe(true);
+  });
+
+  it('treats the same line written differently as the same number', () => {
+    const guard = new RecipientGuard('buy 500 airtime for 0803 123 4567');
+    for (const written of ['08031234567', '+2348031234567', '2348031234567', '803-123-4567']) {
+      expect(guard.typedNumber(written)).toBe(true);
+    }
+  });
+
+  it('rejects a number the owner never typed', () => {
+    const guard = new RecipientGuard('buy 500 airtime for 08031234567');
+    expect(guard.typedNumber('08099999999')).toBe(false);
+    expect(guard.typedNumber('+2348099999999')).toBe(false);
+  });
+
+  it('rejects a number that only appeared earlier in the conversation', () => {
+    expect(new RecipientGuard('do that again').typedNumber('08031234567')).toBe(false);
+  });
+
+  it('allows a meter number the owner typed', () => {
+    const guard = new RecipientGuard('pay 5000 electricity for meter 04123456789 on ikeja');
+    expect(guard.typedNumber('04123456789')).toBe(true);
+  });
+
+  it('does not read an amount as a number to pay', () => {
+    const guard = new RecipientGuard('buy 5000 airtime');
+    expect(guard.typedNumber('5000')).toBe(false);
+  });
+
+  it('does not read the digits of an address as a phone number', () => {
+    const digits = '0x1234567890123456789012345678901234567890';
+    const guard = new RecipientGuard(`send 5 USDC to ${digits}`);
+    expect(guard.typedNumber('1234567890')).toBe(false);
+  });
+});
+
 describe('parseTokenAmount', () => {
   it('parses whole and decimal amounts', () => {
     expect(parseTokenAmount('2.5', 6, 'USDC')).toBe(2_500_000n);

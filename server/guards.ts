@@ -2,18 +2,44 @@
 // (server/guards.test.ts). The model's output is untrusted: these decide what runs.
 import { formatUnits, parseUnits } from 'viem';
 
+/** The digits that identify a phone or meter number, however it was written */
+function significantDigits(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return null;
+  // "08031234567", "+2348031234567" and "8031234567" are one line: country codes
+  // and a trunk zero differ, the subscriber number doesn't, so compare the tail
+  return digits.slice(-9);
+}
+
 /**
- * Recipients the owner typed in THIS message. An address or .arc name that only
- * appears in chat history, a tool result, or the model's reply is never allowed.
+ * Recipients the owner typed in THIS message. An address, .arc name, phone number
+ * or meter number that only appears in chat history, a tool result, or the model's
+ * reply is never allowed — otherwise text the agent merely read could choose who
+ * gets paid.
  */
 export class RecipientGuard {
   private readonly addresses: Set<string>;
   private readonly names: Set<string>;
+  private readonly numbers: Set<string>;
 
   constructor(ownerMessage: string) {
     // Whole 40-hex addresses only: a pasted 64-hex tx hash doesn't make its prefix payable
     this.addresses = new Set((ownerMessage.match(/\b0x[a-fA-F0-9]{40}\b/g) ?? []).map((a) => a.toLowerCase()));
     this.names = new Set((ownerMessage.match(/\b[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
+    // Phone and meter numbers. Addresses go first so their digits can't be read
+    // as a line to top up.
+    const withoutAddresses = ownerMessage.replace(/0x[a-fA-F0-9]+/g, ' ');
+    this.numbers = new Set(
+      (withoutAddresses.match(/\+?\d[\d\s().-]{5,20}\d/g) ?? [])
+        .map((candidate) => significantDigits(candidate))
+        .filter((digits): digits is string => digits != null),
+    );
+  }
+
+  /** Whether the owner typed this phone or meter number in the current message */
+  typedNumber(value: string): boolean {
+    const digits = significantDigits(value);
+    return digits != null && this.numbers.has(digits);
   }
 
   /** Whether the owner typed this .arc name (label without ".arc") */

@@ -170,6 +170,58 @@ function paymentProblem(invoice, max = maxUsdc()) {
   if (currency && currency !== "USDC") return { problem: `the invoice is priced in ${currency}, not USDC` };
   return { id, payment: { address, price: String(payment?.price), currency: currency || "USDC" } };
 }
+async function billProducts(category, country) {
+  const categories = CATEGORIES[category];
+  if (!categories) throw new Error(`unknown category "${category}"`);
+  const key = `${country}:${categories}`;
+  const hit = catalogue.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.body.products;
+  const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(categories)}&limit=50`);
+  if (status !== 200) throw new Error(problemText(body, status));
+  const products = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p) => p != null && p.inStock).sort((a, b) => a.name.localeCompare(b.name));
+  catalogue.set(key, { at: Date.now(), body: { products } });
+  return products;
+}
+async function phoneOperators(number) {
+  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+  if (status !== 200) return [];
+  const data = body.data;
+  const list = Array.isArray(data) ? data : data ? [data] : [];
+  return list.map((o) => {
+    const row = o;
+    return { id: str(row.id), name: str(row.name) || str(row.id) };
+  }).filter((o) => o.id !== "");
+}
+async function createInvoice(request) {
+  const { status, body } = await bitrefill("/invoices", {
+    method: "POST",
+    body: JSON.stringify({
+      products: [
+        {
+          product_id: request.productId,
+          quantity: 1,
+          ...request.packageId ? { package_id: request.packageId } : {},
+          ...request.value ? { value: Number(request.value) } : {},
+          // Bitrefill uses this field for the phone number and for the account or
+          // meter number of a biller that needs one
+          phone_number: request.recipient
+        }
+      ],
+      payment_method: PAYMENT_METHOD,
+      refund_address: request.refundAddress
+    })
+  });
+  if (status !== 200 && status !== 201) {
+    console.error("[bills] invoice failed", status, body.message ?? body.error);
+    return { problem: problemText(body, status), status: status === 401 || status === 403 ? 503 : 400 };
+  }
+  const verdict = paymentProblem(body.data);
+  if ("problem" in verdict) {
+    console.error(`[bills] unusable invoice: ${verdict.problem}`);
+    return { problem: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.`, status: 502 };
+  }
+  return { id: verdict.id, payment: verdict.payment, invoice: body.data };
+}
 async function handleBills(route, request) {
   const url = new URL(request.url);
   const problem = configProblem();
@@ -195,9 +247,9 @@ async function handleBills(route, request) {
     const key = `${country}:${category}`;
     const hit = catalogue.get(key);
     if (hit && Date.now() - hit.at < CACHE_MS) return json(200, hit.body);
-    const { status: status2, body: body2 } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(category)}&limit=50`);
-    if (status2 !== 200) return json(status2 === 401 ? 503 : 502, { error: problemText(body2, status2) });
-    const products = (Array.isArray(body2.data) ? body2.data : []).map(toProduct).filter((p) => p != null && p.inStock).sort((a, b) => a.name.localeCompare(b.name));
+    const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(category)}&limit=50`);
+    if (status !== 200) return json(status === 401 ? 503 : 502, { error: problemText(body, status) });
+    const products = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p) => p != null && p.inStock).sort((a, b) => a.name.localeCompare(b.name));
     const payload2 = { products };
     catalogue.set(key, { at: Date.now(), body: payload2 });
     return json(200, payload2);
@@ -205,69 +257,46 @@ async function handleBills(route, request) {
   if (route === "product") {
     const id = str(url.searchParams.get("id"));
     if (!PRODUCT_ID.test(id)) return json(400, { error: "bad product id" });
-    const { status: status2, body: body2 } = await bitrefill(`/products/${encodeURIComponent(id)}`);
-    const product = toProduct(body2.data);
-    if (status2 !== 200 || !product) return json(502, { error: problemText(body2, status2) });
+    const { status, body } = await bitrefill(`/products/${encodeURIComponent(id)}`);
+    const product = toProduct(body.data);
+    if (status !== 200 || !product) return json(502, { error: problemText(body, status) });
     return json(200, { product });
   }
   if (route === "phone") {
     const number = str(url.searchParams.get("number")).replace(/[\s()-]/g, "");
     if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: "that does not look like a phone number" });
-    const { status: status2, body: body2 } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
-    if (status2 !== 200) return json(status2 === 429 ? 429 : 502, { error: problemText(body2, status2) });
-    const data = body2.data;
+    const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+    if (status !== 200) return json(status === 429 ? 429 : 502, { error: problemText(body, status) });
+    const data = body.data;
     const list = Array.isArray(data) ? data : data ? [data] : [];
     const operators = list.map((o) => {
       const row = o;
       return { id: str(row.id), name: str(row.name) || str(row.id) };
     }).filter((o) => o.id !== "");
-    const meta = body2.meta;
+    const meta = body.meta;
     return json(200, { number: str(meta?.phone_number) || number, operators });
   }
   if (route === "invoice") {
     const id = str(url.searchParams.get("id"));
     if (!INVOICE_ID.test(id)) return json(400, { error: "bad invoice id" });
-    const { status: status2, body: body2 } = await bitrefill(`/invoices/${encodeURIComponent(id)}`);
-    if (status2 !== 200) return json(502, { error: problemText(body2, status2) });
-    return json(200, { invoice: body2.data });
+    const { status, body } = await bitrefill(`/invoices/${encodeURIComponent(id)}`);
+    if (status !== 200) return json(502, { error: problemText(body, status) });
+    return json(200, { invoice: body.data });
   }
   if (request.method !== "POST") return json(405, { error: "method not allowed" });
   const payload = await request.json().catch(() => null);
   const checked = invoiceProblem(payload);
   if ("problem" in checked) return json(400, { error: checked.problem });
-  const { productId, packageId, value, recipient, refundAddress } = checked.invoice;
-  const { status, body } = await bitrefill("/invoices", {
-    method: "POST",
-    body: JSON.stringify({
-      products: [
-        {
-          product_id: productId,
-          quantity: 1,
-          ...packageId ? { package_id: packageId } : {},
-          ...value ? { value: Number(value) } : {},
-          // Bitrefill uses this field for the phone number and for the account or
-          // meter number of a biller that needs one
-          phone_number: recipient
-        }
-      ],
-      payment_method: PAYMENT_METHOD,
-      refund_address: refundAddress
-    })
-  });
-  if (status !== 200 && status !== 201) {
-    console.error("[bills] invoice failed", status, body.message ?? body.error);
-    return json(status === 401 || status === 403 ? 503 : 400, { error: problemText(body, status) });
-  }
-  const verdict = paymentProblem(body.data);
-  if ("problem" in verdict) {
-    console.error(`[bills] unusable invoice: ${verdict.problem}`);
-    return json(502, { error: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.` });
-  }
-  return json(201, { invoice: body.data, payment: verdict.payment, id: verdict.id });
+  const created = await createInvoice(checked.invoice);
+  if ("problem" in created) return json(created.status, { error: created.problem });
+  return json(201, { invoice: created.invoice, payment: created.payment, id: created.id });
 }
 export {
+  billProducts,
+  createInvoice,
   handleBills,
   invoiceProblem,
   maxUsdc,
-  paymentProblem
+  paymentProblem,
+  phoneOperators
 };

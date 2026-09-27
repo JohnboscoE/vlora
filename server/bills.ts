@@ -201,6 +201,75 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
   return { id, payment: { address, price: String(payment?.price), currency: currency || 'USDC' } };
 }
 
+/** Products for a category and country, straight from Bitrefill (cached) */
+export async function billProducts(category: string, country: string): Promise<BillProduct[]> {
+  const categories = CATEGORIES[category];
+  if (!categories) throw new Error(`unknown category "${category}"`);
+  const key = `${country}:${categories}`;
+  const hit = catalogue.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return (hit.body as { products: BillProduct[] }).products;
+  const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(categories)}&limit=50`);
+  if (status !== 200) throw new Error(problemText(body, status));
+  const products = (Array.isArray(body.data) ? body.data : [])
+    .map(toProduct)
+    .filter((p): p is BillProduct => p != null && p.inStock)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  catalogue.set(key, { at: Date.now(), body: { products } });
+  return products;
+}
+
+/** The networks that serve a phone number, so a top-up needn't ask which it is */
+export async function phoneOperators(number: string): Promise<{ id: string; name: string }[]> {
+  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+  if (status !== 200) return [];
+  const data = body.data;
+  const list = Array.isArray(data) ? data : data ? [data] : [];
+  return list
+    .map((o) => {
+      const row = o as Record<string, unknown>;
+      return { id: str(row.id), name: str(row.name) || str(row.id) };
+    })
+    .filter((o) => o.id !== '');
+}
+
+/**
+ * Create an invoice and check the payment instructions before handing them back.
+ * Shared by the route the app calls and by the agent's pay_bill tool.
+ */
+export async function createInvoice(
+  request: InvoiceRequest,
+): Promise<{ problem: string; status: number } | { id: string; payment: BillPayment; invoice: unknown }> {
+  const { status, body } = await bitrefill('/invoices', {
+    method: 'POST',
+    body: JSON.stringify({
+      products: [
+        {
+          product_id: request.productId,
+          quantity: 1,
+          ...(request.packageId ? { package_id: request.packageId } : {}),
+          ...(request.value ? { value: Number(request.value) } : {}),
+          // Bitrefill uses this field for the phone number and for the account or
+          // meter number of a biller that needs one
+          phone_number: request.recipient,
+        },
+      ],
+      payment_method: PAYMENT_METHOD,
+      refund_address: request.refundAddress,
+    }),
+  });
+  if (status !== 200 && status !== 201) {
+    console.error('[bills] invoice failed', status, body.message ?? body.error);
+    return { problem: problemText(body, status), status: status === 401 || status === 403 ? 503 : 400 };
+  }
+  // The invoice says where the money goes, so check it before anything is paid
+  const verdict = paymentProblem(body.data);
+  if ('problem' in verdict) {
+    console.error(`[bills] unusable invoice: ${verdict.problem}`);
+    return { problem: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.`, status: 502 };
+  }
+  return { id: verdict.id, payment: verdict.payment, invoice: body.data };
+}
+
 export async function handleBills(route: BillsRoute, request: Request): Promise<Response> {
   const url = new URL(request.url);
   const problem = configProblem();
@@ -281,36 +350,8 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
   const payload = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const checked = invoiceProblem(payload);
   if ('problem' in checked) return json(400, { error: checked.problem });
-  const { productId, packageId, value, recipient, refundAddress } = checked.invoice;
 
-  const { status, body } = await bitrefill('/invoices', {
-    method: 'POST',
-    body: JSON.stringify({
-      products: [
-        {
-          product_id: productId,
-          quantity: 1,
-          ...(packageId ? { package_id: packageId } : {}),
-          ...(value ? { value: Number(value) } : {}),
-          // Bitrefill uses this field for the phone number and for the account or
-          // meter number of a biller that needs one
-          phone_number: recipient,
-        },
-      ],
-      payment_method: PAYMENT_METHOD,
-      refund_address: refundAddress,
-    }),
-  });
-  if (status !== 200 && status !== 201) {
-    console.error('[bills] invoice failed', status, body.message ?? body.error);
-    return json(status === 401 || status === 403 ? 503 : 400, { error: problemText(body, status) });
-  }
-
-  // The invoice says where the user's money goes, so check it before the app pays
-  const verdict = paymentProblem(body.data);
-  if ('problem' in verdict) {
-    console.error(`[bills] unusable invoice: ${verdict.problem}`);
-    return json(502, { error: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.` });
-  }
-  return json(201, { invoice: body.data, payment: verdict.payment, id: verdict.id });
+  const created = await createInvoice(checked.invoice);
+  if ('problem' in created) return json(created.status, { error: created.problem });
+  return json(201, { invoice: created.invoice, payment: created.payment, id: created.id });
 }

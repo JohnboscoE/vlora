@@ -8,7 +8,7 @@ import { erc20Abi } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { WalletButton } from './components/WalletButton';
 import { toast } from 'sonner';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import { ChatMessage, TypingBubble, type ChatMessageData, type StepState } from './components/ChatMessage';
 import { ChatInput, type SlashCommand } from './components/ChatInput';
@@ -179,6 +179,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'cashout', label: 'Cash out to a bank', hint: 'USDC to naira, shillings and more, paid to a bank account', icon: Banknote, action: 'submit', template: '/cashout' },
   { id: 'airtime', label: 'Airtime, data & bills', hint: 'Top up a phone or pay electricity with USDC', icon: Receipt, action: 'submit', template: '/airtime' },
   { id: 'history', label: 'History & receipts', hint: 'Everything you have done here, with a receipt to download', icon: History, action: 'submit', template: '/history' },
+  { id: 'wallet', label: 'Agent wallet', hint: 'Create, fund or limit the wallet the AI spends from', icon: Bot, action: 'submit', template: '/wallet' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
   { id: 'contacts', label: 'My contacts', hint: 'List saved contacts', icon: BookUser, action: 'submit', template: 'my contacts' },
@@ -256,6 +257,7 @@ export default function App() {
   // "/cashout" and "/history" open their panels
   const [offrampOpen, setOfframpOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   // "/airtime", "/data", "/electricity", "/tv" and "/bills" open the same panel on different tabs
   const [billsOpen, setBillsOpen] = useState(false);
   const [billsCategory, setBillsCategory] = useState<BillCategory>('airtime');
@@ -266,6 +268,34 @@ export default function App() {
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
+
+  /**
+   * Which panel the phone shows over the chat. Only one at a time, and only when
+   * the person asked for it — on a small screen the collapsed rows added up to
+   * more than the screen had.
+   */
+  const closeMobilePanel = () => {
+    setBillsOpen(false);
+    setOfframpOpen(false);
+    setEarnOpen(false);
+    setDepositOpen(false);
+    setHistoryOpen(false);
+    setAgentPanelOpen(false);
+  };
+
+  const mobilePanel = billsOpen
+    ? 'bills'
+    : offrampOpen
+      ? 'offramp'
+      : earnOpen
+        ? 'earn'
+        : depositOpen
+          ? 'deposit'
+          : historyOpen
+            ? 'history'
+            : agentPanelOpen && !wrongChain
+              ? 'agent'
+              : null;
   const arcNameFee = useArcNameFee();
   const myArcName = useMyArcName(isConnected ? address : undefined, nameRefresh);
   const showClaimName = ARC_NAMES_LIVE && isConnected && !wrongChain && !myArcName;
@@ -1130,6 +1160,19 @@ export default function App() {
       );
       return true;
     }
+    if (['/wallet', '/agent-wallet', '/agentwallet', '/vault'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setAgentPanelOpen(true);
+      addMessage(
+        agentMsg(
+          isConnected
+            ? 'Agent wallet is open in the panel — create one, fund it, set its limits, or pause it. You sign all of that yourself.'
+            : 'Connect your wallet or sign in first, then open the agent wallet again.',
+          'info',
+        ),
+      );
+      return true;
+    }
     if (['/history', '/activity', '/receipts', '/transactions'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setHistoryOpen(true);
@@ -1724,36 +1767,6 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   />
                 </div>
               )}
-              {isConnected && (
-                <div className="mt-3">
-                  <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />
-                </div>
-              )}
-              {isConnected && (
-                <div className="mt-3">
-                  <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />
-                </div>
-              )}
-              {isConnected && (
-                <div className="mt-3">
-                  <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />
-                </div>
-              )}
-              {isConnected && (
-                <div className="mt-3">
-                  <BillsPanel collapsible open={billsOpen || undefined} onOpenChange={setBillsOpen} category={billsCategory} />
-                </div>
-              )}
-              {isConnected && (
-                <div className="mt-3">
-                  <HistoryPanel collapsible open={historyOpen || undefined} onOpenChange={setHistoryOpen} />
-                </div>
-              )}
-              {isConnected && !wrongChain && (
-                <div className="mt-3">
-                  <AgentPanel collapsible onVaultChange={onAgentVaultChange} />
-                </div>
-              )}
             </div>
           )}
 
@@ -1827,6 +1840,33 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
           </div>
         </main>
       </div>
+
+      {/* On a phone a panel opens over the chat instead of pushing it off screen */}
+      <AnimatePresence>
+        {!isDesktop && isConnected && mobilePanel && (
+          <motion.div
+            initial={{ y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 24, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-x-0 bottom-0 z-40 max-h-[82vh] overflow-y-auto overscroll-contain p-3 pb-4"
+          >
+            {mobilePanel === 'deposit' && <DepositPanel collapsible open onOpenChange={setDepositOpen} />}
+            {mobilePanel === 'earn' && <EarnPanel collapsible open onOpenChange={setEarnOpen} />}
+            {mobilePanel === 'offramp' && <OfframpPanel collapsible open onOpenChange={setOfframpOpen} />}
+            {mobilePanel === 'bills' && <BillsPanel collapsible open onOpenChange={setBillsOpen} category={billsCategory} />}
+            {mobilePanel === 'history' && <HistoryPanel collapsible open onOpenChange={setHistoryOpen} />}
+            {mobilePanel === 'agent' && <AgentPanel collapsible open onOpenChange={setAgentPanelOpen} onVaultChange={onAgentVaultChange} />}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {!isDesktop && isConnected && mobilePanel && (
+        <button
+          aria-label="Close panel"
+          onClick={closeMobilePanel}
+          className="fixed inset-0 z-30 bg-ink/20 backdrop-blur-[2px]"
+        />
+      )}
 
       {/* Typed cash-outs and bills confirm here, like any other transaction */}
       <AnimatePresence>
