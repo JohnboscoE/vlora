@@ -138,7 +138,14 @@ function toProduct(raw) {
       const o = pkg;
       return { id: str(o.id) || str(o.package_id), value: String(o.value ?? ""), price: typeof o.price === "number" ? o.price : void 0 };
     }).filter((pkg) => pkg.id !== ""),
-    ...range && typeof range.min === "number" && typeof range.max === "number" ? { range: { min: range.min, max: range.max, step: typeof range.step === "number" ? range.step : 1 } } : {}
+    ...range && typeof range.min === "number" && typeof range.max === "number" ? {
+      range: {
+        min: range.min,
+        max: range.max,
+        step: typeof range.step === "number" ? range.step : 1,
+        ...typeof range.price_rate === "number" ? { priceRate: range.price_rate } : {}
+      }
+    } : {}
   };
 }
 function invoiceProblem(payload) {
@@ -156,20 +163,51 @@ function invoiceProblem(payload) {
   if (!isAddress(refundAddress)) return { problem: "A refund address is required." };
   return { invoice: { productId, ...packageId ? { packageId } : {}, ...value ? { value } : {}, recipient, refundAddress } };
 }
+function interpretPrice(raw) {
+  const text = String(raw ?? "").trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (text.includes(".")) return { usdc: value, smallestUnit: false };
+  return value >= 1e3 ? { usdc: value / 1e6, smallestUnit: true } : { usdc: value, smallestUnit: false };
+}
+async function fiatPerUsdc(currency) {
+  try {
+    const res = await fetch(`https://api.paycrest.io/v1/rates/USDC/1/${encodeURIComponent(currency)}`, {
+      headers: { accept: "application/json" }
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const rate = Number(body.data);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+  } catch {
+    return null;
+  }
+}
+async function plausiblePrice(usdc, fiatAmount, currency) {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
+  const rate = currency.toUpperCase() === "USD" ? 1 : await fiatPerUsdc(currency);
+  if (rate == null) return null;
+  const expected = fiatAmount / rate;
+  if (usdc > expected * 4) return `${usdc} USDC is far more than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  if (usdc < expected / 4) return `${usdc} USDC is far less than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  return null;
+}
 function paymentProblem(invoice, max = maxUsdc()) {
   const data = invoice;
   const id = str(data?.id);
   const payment = data?.payment;
   const address = str(payment?.address);
-  const price = Number(payment?.price);
   const currency = str(payment?.currency).toUpperCase();
   const quoted = `${str(payment?.price) || String(payment?.price ?? "?")} ${currency || "(no currency)"} by ${str(payment?.method) || "unknown method"}`;
   if (!id) return { problem: "the invoice has no id" };
   if (!isAddress(address)) return { problem: "the payment address is not an address" };
-  if (!Number.isFinite(price) || price <= 0) return { problem: `the invoice has no usable price (${quoted})` };
+  const read = interpretPrice(payment?.price);
+  if (!read) return { problem: `the invoice has no usable price (${quoted})` };
   if (currency && currency !== "USDC") return { problem: `the invoice is priced in ${quoted}, not USDC` };
-  if (price > max) return { problem: `the invoice asks for ${quoted}, above the ${max} USDC limit` };
-  return { id, payment: { address, price: String(payment?.price), currency: currency || "USDC" } };
+  if (read.usdc > max) return { problem: `the invoice asks for ${read.usdc} USDC (${quoted}), above the ${max} USDC limit` };
+  const price = read.usdc.toFixed(6).replace(/\.?0+$/, "");
+  return { id, payment: { address, price, currency: currency || "USDC" } };
 }
 async function billProducts(category, country) {
   const categories = CATEGORIES[category];
@@ -298,8 +336,10 @@ export {
   billProducts,
   createInvoice,
   handleBills,
+  interpretPrice,
   invoiceProblem,
   maxUsdc,
   paymentProblem,
-  phoneOperators
+  phoneOperators,
+  plausiblePrice
 };

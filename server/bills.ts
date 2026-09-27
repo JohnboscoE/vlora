@@ -111,7 +111,7 @@ export interface BillProduct {
   /** What the product needs from the user: "phone_number", "meter_number", "none"… */
   recipientType: string;
   packages: { id: string; value: string; price?: number }[];
-  range?: { min: number; max: number; step: number };
+  range?: { min: number; max: number; step: number; priceRate?: number };
 }
 
 /** Bitrefill's product shape, reduced to what the panel needs */
@@ -120,7 +120,7 @@ function toProduct(raw: unknown): BillProduct | null {
   const id = str(p?.id);
   if (!id) return null;
   const packages = Array.isArray(p?.packages) ? p.packages : [];
-  const range = p?.range as { min?: number; max?: number; step?: number } | undefined;
+  const range = p?.range as { min?: number; max?: number; step?: number; price_rate?: number } | undefined;
   return {
     id,
     name: str(p?.name) || id,
@@ -136,7 +136,14 @@ function toProduct(raw: unknown): BillProduct | null {
       })
       .filter((pkg) => pkg.id !== ''),
     ...(range && typeof range.min === 'number' && typeof range.max === 'number'
-      ? { range: { min: range.min, max: range.max, step: typeof range.step === 'number' ? range.step : 1 } }
+      ? {
+          range: {
+            min: range.min,
+            max: range.max,
+            step: typeof range.step === 'number' ? range.step : 1,
+            ...(typeof range.price_rate === 'number' ? { priceRate: range.price_rate } : {}),
+          },
+        }
       : {}),
   };
 }
@@ -182,6 +189,56 @@ export interface BillPayment {
 }
 
 /**
+ * What an invoice's price means in whole USDC.
+ *
+ * Bitrefill quotes a `usdc_base` invoice in USDC's smallest unit — 80000 for a
+ * ~$0.08 top-up, observed on live invoices — while their docs show a Bitcoin
+ * invoice as a decimal (0.00123456). So the unit is read from the value rather
+ * than assumed: a plain integer of 1000 or more is smallest-unit, anything with
+ * a decimal point is already whole USDC. Getting this backwards would underpay
+ * an invoice rather than overpay it, and the ceiling bounds it either way.
+ */
+export function interpretPrice(raw: unknown): { usdc: number; smallestUnit: boolean } | null {
+  const text = String(raw ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (text.includes('.')) return { usdc: value, smallestUnit: false };
+  return value >= 1000 ? { usdc: value / 1e6, smallestUnit: true } : { usdc: value, smallestUnit: false };
+}
+
+/** Live local-currency-per-USDC rate, from Paycrest's public quote (no key needed) */
+async function fiatPerUsdc(currency: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://api.paycrest.io/v1/rates/USDC/1/${encodeURIComponent(currency)}`, {
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: unknown };
+    const rate = Number(body.data);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether `usdc` is a believable price for `fiatAmount` of `currency`, checked
+ * against a rate from somewhere other than Bitrefill. Wide on purpose: it is
+ * here to catch a unit that moved by a factor of a million, not to haggle over
+ * a spread. Unknown currency or no rate → no opinion.
+ */
+export async function plausiblePrice(usdc: number, fiatAmount: number, currency: string): Promise<string | null> {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
+  const rate = currency.toUpperCase() === 'USD' ? 1 : await fiatPerUsdc(currency);
+  if (rate == null) return null;
+  const expected = fiatAmount / rate;
+  if (usdc > expected * 4) return `${usdc} USDC is far more than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  if (usdc < expected / 4) return `${usdc} USDC is far less than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  return null;
+}
+
+/**
  * The payment instructions an invoice must carry before the app sends anything:
  * USDC, to a real address, for no more than the ceiling.
  */
@@ -190,7 +247,6 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
   const id = str(data?.id);
   const payment = data?.payment;
   const address = str(payment?.address);
-  const price = Number(payment?.price);
   const currency = str(payment?.currency).toUpperCase();
 
   // Say what Bitrefill actually sent, so a refusal is diagnosable instead of mysterious
@@ -198,12 +254,15 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
 
   if (!id) return { problem: 'the invoice has no id' };
   if (!isAddress(address)) return { problem: 'the payment address is not an address' };
-  if (!Number.isFinite(price) || price <= 0) return { problem: `the invoice has no usable price (${quoted})` };
+  const read = interpretPrice(payment?.price);
+  if (!read) return { problem: `the invoice has no usable price (${quoted})` };
   // Currency first: a price in the wrong unit reads as an absurd amount, and
   // knowing which unit it is beats being told the number is too big
   if (currency && currency !== 'USDC') return { problem: `the invoice is priced in ${quoted}, not USDC` };
-  if (price > max) return { problem: `the invoice asks for ${quoted}, above the ${max} USDC limit` };
-  return { id, payment: { address, price: String(payment?.price), currency: currency || 'USDC' } };
+  if (read.usdc > max) return { problem: `the invoice asks for ${read.usdc} USDC (${quoted}), above the ${max} USDC limit` };
+  // Whole USDC, however it was quoted: 6 decimals, the most USDC can hold
+  const price = read.usdc.toFixed(6).replace(/\.?0+$/, '');
+  return { id, payment: { address, price, currency: currency || 'USDC' } };
 }
 
 /** Products for a category and country, straight from Bitrefill (cached) */

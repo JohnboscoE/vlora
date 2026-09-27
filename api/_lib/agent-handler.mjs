@@ -337,23 +337,39 @@ function toProduct(raw) {
       const o = pkg;
       return { id: str(o.id) || str(o.package_id), value: String(o.value ?? ""), price: typeof o.price === "number" ? o.price : void 0 };
     }).filter((pkg) => pkg.id !== ""),
-    ...range && typeof range.min === "number" && typeof range.max === "number" ? { range: { min: range.min, max: range.max, step: typeof range.step === "number" ? range.step : 1 } } : {}
+    ...range && typeof range.min === "number" && typeof range.max === "number" ? {
+      range: {
+        min: range.min,
+        max: range.max,
+        step: typeof range.step === "number" ? range.step : 1,
+        ...typeof range.price_rate === "number" ? { priceRate: range.price_rate } : {}
+      }
+    } : {}
   };
+}
+function interpretPrice(raw) {
+  const text = String(raw ?? "").trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (text.includes(".")) return { usdc: value, smallestUnit: false };
+  return value >= 1e3 ? { usdc: value / 1e6, smallestUnit: true } : { usdc: value, smallestUnit: false };
 }
 function paymentProblem(invoice, max = maxUsdc()) {
   const data = invoice;
   const id = str(data?.id);
   const payment = data?.payment;
   const address = str(payment?.address);
-  const price = Number(payment?.price);
   const currency = str(payment?.currency).toUpperCase();
   const quoted = `${str(payment?.price) || String(payment?.price ?? "?")} ${currency || "(no currency)"} by ${str(payment?.method) || "unknown method"}`;
   if (!id) return { problem: "the invoice has no id" };
   if (!isAddress2(address)) return { problem: "the payment address is not an address" };
-  if (!Number.isFinite(price) || price <= 0) return { problem: `the invoice has no usable price (${quoted})` };
+  const read = interpretPrice(payment?.price);
+  if (!read) return { problem: `the invoice has no usable price (${quoted})` };
   if (currency && currency !== "USDC") return { problem: `the invoice is priced in ${quoted}, not USDC` };
-  if (price > max) return { problem: `the invoice asks for ${quoted}, above the ${max} USDC limit` };
-  return { id, payment: { address, price: String(payment?.price), currency: currency || "USDC" } };
+  if (read.usdc > max) return { problem: `the invoice asks for ${read.usdc} USDC (${quoted}), above the ${max} USDC limit` };
+  const price = read.usdc.toFixed(6).replace(/\.?0+$/, "");
+  return { id, payment: { address, price, currency: currency || "USDC" } };
 }
 async function billProducts(category, country) {
   const categories = CATEGORIES[category];
