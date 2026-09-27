@@ -244,6 +244,53 @@ Rates, the bank list (171 Nigerian institutions) and account-name verification c
 
 One caveat worth knowing: if no payout provider takes an order, Paycrest refunds to the refund address **on Base**. That's the user's own wallet, so nothing is lost, but moving it needs a little ETH for gas. The review screen says this before you confirm.
 
+## Why payments leave Arc (and come back to it)
+
+Vlora keeps your money on Arc. The two services that turn USDC into something
+you can use off-chain — [Paycrest](https://paycrest.io) for a bank payout,
+[Bitrefill](https://www.bitrefill.com) for airtime, data and bills — both settle
+on **Base**, and neither lists Arc yet. Arc's own App Kit has an on-ramp (buy
+USDC with fiat) but no off-ramp, and Arc's opt-in privacy is still roadmap, so
+there is no Arc-native way to pay a phone company today.
+
+Rather than make that the user's problem, the app carries it:
+
+1. You type what you want, on Arc, holding only Arc USDC.
+2. Vlora asks the provider for an invoice or order. That names an address on
+   Base and an exact amount.
+3. Vlora bridges **only that amount** from your Arc wallet to that address
+   using Circle's CCTP through App Kit, and the provider delivers.
+
+What this means in practice:
+
+- **One signature, on Arc.** Circle's forwarder submits the mint on Base, so you
+  never add a network, never hold ETH, and never see Base in your wallet.
+- **It isn't a swap.** The same USDC moves chains — no slippage, no price
+  impact, no second token.
+- **Only the bill's worth moves.** Your balance stays on Arc; nothing is
+  pre-funded on Base.
+- **The fee is flat.** About 0.055 USDC per transfer, whatever the size, which
+  is the relayer's price for you not needing gas on Base. It is most of the cost
+  of a 100 naira top-up and rounding error on a 5,000 naira one, so the
+  confirmation shows it before you agree.
+- **Fees are added on top**, because Arc doesn't allow source-paid bridge fees
+  (`feePayment: 'source'` is rejected from Arc), so the exact amount the
+  provider quoted is what arrives.
+
+This is a detour, not a design. When Bitrefill or Paycrest lists Arc, the
+`NETWORK` constant in `server/offramp.ts` (or the payment method in
+`server/bills.ts`) changes and the bridge step disappears — the rest of the flow
+is already written against "pay this address this much".
+
+### Checking the rails without spending
+
+`GET /api/bills/preflight?category=airtime&country=NG&number=<phone>&refundAddress=<0x…>`
+runs everything a real purchase does except the transfer: the catalogue, the
+operator lookup for that number, the product and its denominations, a real
+(unpaid, self-expiring) invoice, and both price checks. It reports each step and
+what *would* be bridged, which leaves exactly one untested step — the one that
+moves money.
+
 ## Airtime and bills (Bitrefill)
 
 `/airtime`, `/data`, `/electricity` and `/tv` buy a top-up or pay a biller with USDC. Bitrefill quotes the invoice, takes the payment in USDC **on Base**, and delivers straight to the phone number or meter — no code to redeem.

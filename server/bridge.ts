@@ -10,8 +10,8 @@
 // 'source'` charges the CCTP fees on Arc, so the exact invoice amount lands.
 import { IS_MAINNET } from './chain';
 
-const SOURCE_CHAIN = IS_MAINNET ? 'Arc' : 'Arc_Testnet';
-export const DESTINATION_CHAIN = IS_MAINNET ? 'Base' : 'Base_Sepolia';
+const SOURCE_CHAIN: 'Arc' | 'Arc_Testnet' = IS_MAINNET ? 'Arc' : 'Arc_Testnet';
+export const DESTINATION_CHAIN: 'Base' | 'Base_Sepolia' = IS_MAINNET ? 'Base' : 'Base_Sepolia';
 export const DESTINATION_LABEL = IS_MAINNET ? 'Base' : 'Base Sepolia';
 
 export interface BridgeOutcome {
@@ -42,7 +42,7 @@ export async function bridgeFromAgent(privateKey: string, recipient: string, amo
       from: { adapter, chain: SOURCE_CHAIN },
       // No adapter for the destination: Circle's forwarder submits the mint, so
       // the agent needs neither a second key nor gas on Base
-      to: { recipientAddress: recipient, chain: DESTINATION_CHAIN, useForwarder: true },
+      to: { recipientAddress: recipient, chain: DESTINATION_CHAIN, useForwarder: true as const },
     };
     // The relayer's fee comes out of what is minted (Arc doesn't allow source-paid
     // fees), so it goes on top here and the invoice receives the exact amount

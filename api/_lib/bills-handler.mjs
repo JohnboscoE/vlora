@@ -94,7 +94,7 @@ function configProblem() {
 }
 var recent = /* @__PURE__ */ new Map();
 var RATE_WINDOW_MS = 6e4;
-var RATE_MAX = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10 };
+var RATE_MAX = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10, preflight: 6 };
 function rateLimited(route) {
   const now = Date.now();
   const hits = (recent.get(route) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -215,14 +215,17 @@ async function fiatPerUsdc(currency) {
     return null;
   }
 }
-async function plausiblePrice(usdc, fiatAmount, currency) {
-  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
-  const rate = currency.toUpperCase() === "USD" ? 1 : await fiatPerUsdc(currency);
-  if (rate == null) return null;
+function priceBand(usdc, fiatAmount, currency, rate) {
+  if (rate == null || !Number.isFinite(fiatAmount) || fiatAmount <= 0 || !Number.isFinite(rate) || rate <= 0) return null;
   const expected = fiatAmount / rate;
   if (usdc > expected * 4) return `${usdc} USDC is far more than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
   if (usdc < expected / 4) return `${usdc} USDC is far less than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
   return null;
+}
+async function plausiblePrice(usdc, fiatAmount, currency) {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
+  const rate = currency.toUpperCase() === "USD" ? 1 : await fiatPerUsdc(currency);
+  return priceBand(usdc, fiatAmount, currency, rate);
 }
 function paymentProblem(invoice, max = maxUsdc()) {
   const data = invoice;
@@ -293,7 +296,23 @@ async function createInvoice(request) {
     console.error(`[bills] unusable invoice: ${verdict.problem}`);
     return { problem: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.`, status: 502 };
   }
+  const ordered = orderedFiat(body.data);
+  if (ordered) {
+    const off = await plausiblePrice(Number(verdict.payment.price), ordered.amount, ordered.currency);
+    if (off) {
+      console.error(`[bills] implausible price: ${off}`);
+      return { problem: `Bitrefill's price doesn't match what was ordered (${off}). Nothing was sent.`, status: 502 };
+    }
+  }
   return { id: verdict.id, payment: verdict.payment, invoice: body.data };
+}
+function orderedFiat(invoice) {
+  const orders = invoice?.orders;
+  const first = Array.isArray(orders) ? orders[0] : void 0;
+  const product = first?.product;
+  const amount = Number(product?.value);
+  const currency = str(product?.currency).toUpperCase();
+  return Number.isFinite(amount) && amount > 0 && /^[A-Z]{3}$/.test(currency) ? { amount, currency } : null;
 }
 async function handleBills(route, request) {
   const url = new URL(request.url);
@@ -350,6 +369,52 @@ async function handleBills(route, request) {
     const meta = body.meta;
     return json(200, { number: str(meta?.phone_number) || number, operators });
   }
+  if (route === "preflight") {
+    const country = (str(url.searchParams.get("country")) || "NG").toUpperCase();
+    const category = str(url.searchParams.get("category")) || "airtime";
+    const number = str(url.searchParams.get("number"));
+    const refundAddress = str(url.searchParams.get("refundAddress"));
+    const steps = [];
+    const note = (step, ok, detail) => steps.push({ step, ok, detail });
+    let products = [];
+    try {
+      products = await billProducts(category, country);
+      note("catalogue", products.length > 0, `${products.length} products for ${category} in ${country}`);
+    } catch (err) {
+      note("catalogue", false, err instanceof Error ? err.message : "failed");
+      return json(200, { steps, ready: false });
+    }
+    let product = products[0];
+    if (number) {
+      const operators = await phoneOperators(number, country);
+      const matched = operators.map((o) => products.find((p) => p.id === o.id)).find(Boolean);
+      note("operator", operators.length > 0, operators.length > 0 ? operators.map((o) => o.name).join(", ") : `no operator for ${number}`);
+      if (matched) product = matched;
+    }
+    if (!product) return json(200, { steps, ready: false });
+    note("product", true, `${product.name} (${product.currency}), ${product.packages.length} denominations`);
+    const cheapest = [...product.packages].sort((a, b) => Number(a.value) - Number(b.value))[0];
+    note("denomination", cheapest != null, cheapest ? `${cheapest.value} ${product.currency}` : "ranged product");
+    if (!isAddress(refundAddress) || !number) {
+      note("invoice", false, "pass ?number=<phone>&refundAddress=<0x\u2026> to quote a real invoice");
+      return json(200, { steps, ready: false });
+    }
+    const created2 = await createInvoice({
+      productId: product.id,
+      ...cheapest ? { packageId: cheapest.id } : { value: String(product.range?.min ?? 1) },
+      recipient: number,
+      refundAddress,
+      country,
+      phone: category === "airtime" || category === "data"
+    });
+    if ("problem" in created2) {
+      note("invoice", false, created2.problem);
+      return json(200, { steps, ready: false });
+    }
+    note("invoice", true, `${created2.payment.price} USDC to ${created2.payment.address} (unpaid, expires on its own)`);
+    note("bridge", true, `the app would bridge ${created2.payment.price} USDC plus the relayer fee from Arc`);
+    return json(200, { steps, ready: true, invoice: created2.id, payment: created2.payment });
+  }
   if (route === "invoice") {
     const id = str(url.searchParams.get("id"));
     if (!INVOICE_ID.test(id)) return json(400, { error: "bad invoice id" });
@@ -372,8 +437,10 @@ export {
   interpretPrice,
   invoiceProblem,
   maxUsdc,
+  orderedFiat,
   paymentProblem,
   phoneOperators,
   plausiblePrice,
+  priceBand,
   toE164
 };

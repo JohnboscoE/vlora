@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { interpretPrice, invoiceProblem, paymentProblem, toE164 } from './bills';
+import { interpretPrice, invoiceProblem, orderedFiat, paymentProblem, priceBand, toE164 } from './bills';
 
 // A bill payment buys something for a phone number or meter and can't be undone,
 // so these are the checks that run before an invoice is created and before the
@@ -131,5 +131,42 @@ describe('interpretPrice — Bitrefill quotes usdc_base in the smallest unit', (
 
   it('refuses anything that is not a positive number', () => {
     for (const bad of ['', '0', '-5', 'free', null, undefined, {}]) expect(interpretPrice(bad)).toBeNull();
+  });
+});
+
+describe('priceBand — a second opinion on what an invoice asks for', () => {
+  // 1360 naira to the dollar, so 200 naira of airtime is about 0.147 USDC
+  const RATE = 1360;
+
+  it('accepts a price in the right ballpark', () => {
+    expect(priceBand(0.147, 200, 'NGN', RATE)).toBeNull();
+    // Bitrefill discounts airtime, so a bit under is normal
+    expect(priceBand(0.132, 200, 'NGN', RATE)).toBeNull();
+  });
+
+  it('catches a price that is a million times too big', () => {
+    expect(priceBand(147000, 200, 'NGN', RATE)).toMatch(/far more/);
+  });
+
+  it('catches a price that is a million times too small', () => {
+    // Under any ceiling, and buys nothing: the ceiling alone would let it through
+    expect(priceBand(0.000000147, 200, 'NGN', RATE)).toMatch(/far less/);
+  });
+
+  it('has no opinion without a rate', () => {
+    expect(priceBand(0.147, 200, 'NGN', null)).toBeNull();
+    expect(priceBand(0.147, 0, 'NGN', RATE)).toBeNull();
+  });
+});
+
+describe('orderedFiat — what the invoice says was ordered', () => {
+  it('reads the amount and currency from the order', () => {
+    expect(orderedFiat({ orders: [{ product: { value: '200', currency: 'NGN' } }] })).toEqual({ amount: 200, currency: 'NGN' });
+  });
+
+  it('returns nothing when the invoice does not say', () => {
+    expect(orderedFiat({ orders: [] })).toBeNull();
+    expect(orderedFiat({ orders: [{ product: { value: '0', currency: 'NGN' } }] })).toBeNull();
+    expect(orderedFiat(null)).toBeNull();
   });
 });

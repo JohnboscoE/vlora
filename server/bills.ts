@@ -13,7 +13,7 @@
 import { isAddress } from 'viem';
 import { CHAIN_ID } from './chain';
 
-export type BillsRoute = 'info' | 'products' | 'product' | 'invoices' | 'invoice' | 'phone';
+export type BillsRoute = 'info' | 'products' | 'product' | 'invoices' | 'invoice' | 'phone' | 'preflight';
 
 const API = 'https://api.bitrefill.com/v2';
 /** The only payment method we use: USDC on Base, an ordinary transfer to an address */
@@ -58,7 +58,7 @@ function configProblem(): string | null {
 // catalogue, 60 per 10 minutes on a single invoice).
 const recent = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
-const RATE_MAX: Record<string, number> = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10 };
+const RATE_MAX: Record<string, number> = { products: 40, product: 40, invoices: 10, invoice: 40, phone: 10, preflight: 6 };
 
 function rateLimited(route: string): boolean {
   const now = Date.now();
@@ -280,14 +280,18 @@ async function fiatPerUsdc(currency: string): Promise<number | null> {
  * here to catch a unit that moved by a factor of a million, not to haggle over
  * a spread. Unknown currency or no rate → no opinion.
  */
-export async function plausiblePrice(usdc: number, fiatAmount: number, currency: string): Promise<string | null> {
-  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
-  const rate = currency.toUpperCase() === 'USD' ? 1 : await fiatPerUsdc(currency);
-  if (rate == null) return null;
+export function priceBand(usdc: number, fiatAmount: number, currency: string, rate: number | null): string | null {
+  if (rate == null || !Number.isFinite(fiatAmount) || fiatAmount <= 0 || !Number.isFinite(rate) || rate <= 0) return null;
   const expected = fiatAmount / rate;
   if (usdc > expected * 4) return `${usdc} USDC is far more than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
   if (usdc < expected / 4) return `${usdc} USDC is far less than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
   return null;
+}
+
+export async function plausiblePrice(usdc: number, fiatAmount: number, currency: string): Promise<string | null> {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
+  const rate = currency.toUpperCase() === 'USD' ? 1 : await fiatPerUsdc(currency);
+  return priceBand(usdc, fiatAmount, currency, rate);
 }
 
 /**
@@ -390,7 +394,29 @@ export async function createInvoice(
     console.error(`[bills] unusable invoice: ${verdict.problem}`);
     return { problem: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.`, status: 502 };
   }
+
+  // Second opinion on the price, from a rate that isn't Bitrefill's. The ceiling
+  // alone can't catch a unit that moved by a factor of a million in the small
+  // direction — 0.0000001 USDC is under any ceiling and buys nothing.
+  const ordered = orderedFiat(body.data);
+  if (ordered) {
+    const off = await plausiblePrice(Number(verdict.payment.price), ordered.amount, ordered.currency);
+    if (off) {
+      console.error(`[bills] implausible price: ${off}`);
+      return { problem: `Bitrefill's price doesn't match what was ordered (${off}). Nothing was sent.`, status: 502 };
+    }
+  }
   return { id: verdict.id, payment: verdict.payment, invoice: body.data };
+}
+
+/** What the invoice says was actually ordered, in the product's own currency */
+export function orderedFiat(invoice: unknown): { amount: number; currency: string } | null {
+  const orders = (invoice as { orders?: unknown } | null)?.orders;
+  const first = Array.isArray(orders) ? (orders[0] as { product?: Record<string, unknown> } | undefined) : undefined;
+  const product = first?.product;
+  const amount = Number(product?.value);
+  const currency = str(product?.currency).toUpperCase();
+  return Number.isFinite(amount) && amount > 0 && /^[A-Z]{3}$/.test(currency) ? { amount, currency } : null;
 }
 
 export async function handleBills(route: BillsRoute, request: Request): Promise<Response> {
@@ -460,6 +486,63 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
       .filter((o) => o.id !== '');
     const meta = body.meta as { phone_number?: unknown } | undefined;
     return json(200, { number: str(meta?.phone_number) || number, operators });
+  }
+
+  if (route === 'preflight') {
+    // Everything a real purchase does except the transfer: catalogue, operator,
+    // product, a genuine invoice (unpaid invoices simply expire, and cost
+    // nothing), the price checks, and what would be sent. It exists because the
+    // only untested step in this app is the one that spends money, and this
+    // narrows that to exactly one step.
+    const country = (str(url.searchParams.get('country')) || 'NG').toUpperCase();
+    const category = str(url.searchParams.get('category')) || 'airtime';
+    const number = str(url.searchParams.get('number'));
+    const refundAddress = str(url.searchParams.get('refundAddress'));
+    const steps: { step: string; ok: boolean; detail: string }[] = [];
+    const note = (step: string, ok: boolean, detail: string) => steps.push({ step, ok, detail });
+
+    let products: BillProduct[] = [];
+    try {
+      products = await billProducts(category, country);
+      note('catalogue', products.length > 0, `${products.length} products for ${category} in ${country}`);
+    } catch (err) {
+      note('catalogue', false, err instanceof Error ? err.message : 'failed');
+      return json(200, { steps, ready: false });
+    }
+
+    let product = products[0];
+    if (number) {
+      const operators = await phoneOperators(number, country);
+      const matched = operators.map((o) => products.find((p) => p.id === o.id)).find(Boolean);
+      note('operator', operators.length > 0, operators.length > 0 ? operators.map((o) => o.name).join(', ') : `no operator for ${number}`);
+      if (matched) product = matched;
+    }
+    if (!product) return json(200, { steps, ready: false });
+    note('product', true, `${product.name} (${product.currency}), ${product.packages.length} denominations`);
+
+    const cheapest = [...product.packages].sort((a, b) => Number(a.value) - Number(b.value))[0];
+    note('denomination', cheapest != null, cheapest ? `${cheapest.value} ${product.currency}` : 'ranged product');
+
+    // An invoice is only created when there is somewhere to refund to
+    if (!isAddress(refundAddress) || !number) {
+      note('invoice', false, 'pass ?number=<phone>&refundAddress=<0x…> to quote a real invoice');
+      return json(200, { steps, ready: false });
+    }
+    const created = await createInvoice({
+      productId: product.id,
+      ...(cheapest ? { packageId: cheapest.id } : { value: String(product.range?.min ?? 1) }),
+      recipient: number,
+      refundAddress,
+      country,
+      phone: category === 'airtime' || category === 'data',
+    });
+    if ('problem' in created) {
+      note('invoice', false, created.problem);
+      return json(200, { steps, ready: false });
+    }
+    note('invoice', true, `${created.payment.price} USDC to ${created.payment.address} (unpaid, expires on its own)`);
+    note('bridge', true, `the app would bridge ${created.payment.price} USDC plus the relayer fee from Arc`);
+    return json(200, { steps, ready: true, invoice: created.id, payment: created.payment });
   }
 
   if (route === 'invoice') {

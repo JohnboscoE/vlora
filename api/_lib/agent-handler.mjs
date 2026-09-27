@@ -374,6 +374,31 @@ function interpretPrice(raw) {
   if (text.includes(".")) return { usdc: value, smallestUnit: false };
   return value >= 1e3 ? { usdc: value / 1e6, smallestUnit: true } : { usdc: value, smallestUnit: false };
 }
+async function fiatPerUsdc(currency) {
+  try {
+    const res = await fetch(`https://api.paycrest.io/v1/rates/USDC/1/${encodeURIComponent(currency)}`, {
+      headers: { accept: "application/json" }
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const rate = Number(body.data);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+  } catch {
+    return null;
+  }
+}
+function priceBand(usdc, fiatAmount, currency, rate) {
+  if (rate == null || !Number.isFinite(fiatAmount) || fiatAmount <= 0 || !Number.isFinite(rate) || rate <= 0) return null;
+  const expected = fiatAmount / rate;
+  if (usdc > expected * 4) return `${usdc} USDC is far more than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  if (usdc < expected / 4) return `${usdc} USDC is far less than ${fiatAmount} ${currency} is worth (about ${expected.toFixed(4)} USDC)`;
+  return null;
+}
+async function plausiblePrice(usdc, fiatAmount, currency) {
+  if (!Number.isFinite(fiatAmount) || fiatAmount <= 0) return null;
+  const rate = currency.toUpperCase() === "USD" ? 1 : await fiatPerUsdc(currency);
+  return priceBand(usdc, fiatAmount, currency, rate);
+}
 function paymentProblem(invoice, max = maxUsdc()) {
   const data = invoice;
   const id = str(data?.id);
@@ -443,7 +468,23 @@ async function createInvoice(request) {
     console.error(`[bills] unusable invoice: ${verdict.problem}`);
     return { problem: `Bitrefill returned an invoice we could not verify (${verdict.problem}). Nothing was sent.`, status: 502 };
   }
+  const ordered = orderedFiat(body.data);
+  if (ordered) {
+    const off = await plausiblePrice(Number(verdict.payment.price), ordered.amount, ordered.currency);
+    if (off) {
+      console.error(`[bills] implausible price: ${off}`);
+      return { problem: `Bitrefill's price doesn't match what was ordered (${off}). Nothing was sent.`, status: 502 };
+    }
+  }
   return { id: verdict.id, payment: verdict.payment, invoice: body.data };
+}
+function orderedFiat(invoice) {
+  const orders = invoice?.orders;
+  const first = Array.isArray(orders) ? orders[0] : void 0;
+  const product = first?.product;
+  const amount = Number(product?.value);
+  const currency = str(product?.currency).toUpperCase();
+  return Number.isFinite(amount) && amount > 0 && /^[A-Z]{3}$/.test(currency) ? { amount, currency } : null;
 }
 
 // server/bridge.ts
