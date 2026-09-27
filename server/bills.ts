@@ -154,6 +154,41 @@ export interface InvoiceRequest {
   value?: string;
   recipient: string;
   refundAddress: string;
+  /** Two-letter country, so a local phone number can be given its dial code */
+  country?: string;
+  /** True for airtime and data: the recipient is a phone line, not a meter */
+  phone?: boolean;
+}
+
+/** Dial codes for the countries the bill catalogue covers */
+const DIAL_CODES: Record<string, string> = {
+  NG: '234',
+  KE: '254',
+  GH: '233',
+  UG: '256',
+  TZ: '255',
+  ZA: '27',
+  US: '1',
+  GB: '44',
+};
+
+/**
+ * A phone number in the form Bitrefill wants (E.164), from the form people type.
+ *
+ * Nobody writing their own number types the country code, so "09134829079" with
+ * a Nigerian catalogue means +2349134829079. Meter and smartcard numbers are
+ * left exactly as given — they are not phone numbers and their leading zero is
+ * part of the number.
+ */
+export function toE164(raw: string, country: string | undefined): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('+')) return trimmed.replace(/[\s()-]/g, '');
+  const digits = trimmed.replace(/\D/g, '');
+  const code = DIAL_CODES[(country ?? '').toUpperCase()];
+  if (!code || digits === '') return trimmed;
+  if (digits.startsWith(code) && digits.length > code.length + 6) return `+${digits}`;
+  // A local number drops its trunk zero when the dial code goes on
+  return `+${code}${digits.replace(/^0+/, '')}`;
 }
 
 /**
@@ -165,9 +200,16 @@ export function invoiceProblem(payload: Record<string, unknown> | null): { probl
   const productId = str(payload?.productId).trim();
   const packageId = str(payload?.packageId).trim();
   const value = str(payload?.value).trim();
-  // People paste "+234 (801) 234-5678"; E.164 keeps none of that punctuation
+  // People paste "+234 (801) 234-5678", and type their own number without a
+  // country code at all; a phone line gets one added, a meter number never does
   const typed = str(payload?.recipient).trim();
-  const recipient = typed.startsWith('+') ? typed.replace(/[\s()-]/g, '') : typed.replace(/[\s()]/g, '');
+  const country = str(payload?.country).toUpperCase();
+  const phone = payload?.phone === true;
+  const recipient = phone
+    ? toE164(typed, country)
+    : typed.startsWith('+')
+      ? typed.replace(/[\s()-]/g, '')
+      : typed.replace(/[\s()]/g, '');
   const refundAddress = str(payload?.refundAddress).trim();
 
   if (!PRODUCT_ID.test(productId)) return { problem: 'Pick something to pay for.' };
@@ -177,7 +219,17 @@ export function invoiceProblem(payload: Record<string, unknown> | null): { probl
   if (!RECIPIENT.test(recipient)) return { problem: 'Check the phone or meter number.' };
   // A crypto invoice needs somewhere to send a refund if delivery fails
   if (!isAddress(refundAddress)) return { problem: 'A refund address is required.' };
-  return { invoice: { productId, ...(packageId ? { packageId } : {}), ...(value ? { value } : {}), recipient, refundAddress } };
+  return {
+    invoice: {
+      productId,
+      ...(packageId ? { packageId } : {}),
+      ...(value ? { value } : {}),
+      recipient,
+      refundAddress,
+      ...(country ? { country } : {}),
+      ...(phone ? { phone } : {}),
+    },
+  };
 }
 
 export interface BillPayment {
@@ -283,8 +335,11 @@ export async function billProducts(category: string, country: string): Promise<B
 }
 
 /** The networks that serve a phone number, so a top-up needn't ask which it is */
-export async function phoneOperators(number: string): Promise<{ id: string; name: string }[]> {
-  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+export async function phoneOperators(number: string, country?: string): Promise<{ id: string; name: string }[]> {
+  // The lookup only recognises E.164, and people type their own number without
+  // a country code
+  const dialled = toE164(number, country);
+  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(dialled)}`);
   if (status !== 200) return [];
   const data = body.data;
   const list = Array.isArray(data) ? data : data ? [data] : [];
@@ -389,7 +444,8 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
   }
 
   if (route === 'phone') {
-    const number = str(url.searchParams.get('number')).replace(/[\s()-]/g, '');
+    const country = str(url.searchParams.get('country')).toUpperCase();
+    const number = toE164(str(url.searchParams.get('number')), country).replace(/[\s()-]/g, '');
     if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: 'that does not look like a phone number' });
     const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
     if (status !== 200) return json(status === 429 ? 429 : 502, { error: problemText(body, status) });

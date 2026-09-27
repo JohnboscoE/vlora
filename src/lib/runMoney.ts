@@ -91,12 +91,15 @@ const KIND: Record<BillCategory, 'airtime' | 'utilities'> = {
 
 export async function runBillPayment(address: Address, plan: ResolvedBill, onStep: StepReport = () => {}): Promise<BillRun> {
   onStep('Getting a price from Bitrefill…');
+  const isPhone = plan.category === 'airtime' || plan.category === 'data';
   const created = await createBillInvoice({
     productId: plan.product.id,
     ...(plan.packageId ? { packageId: plan.packageId } : {}),
     ...(plan.value ? { value: plan.value } : {}),
     recipient: plan.recipient,
     refundAddress: address,
+    country: plan.country ?? plan.product.country,
+    ...(isPhone ? { phone: true } : {}),
   });
 
   const total = amountToPay(created.payment.price);

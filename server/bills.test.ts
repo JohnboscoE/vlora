@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { invoiceProblem, paymentProblem } from './bills';
+import { interpretPrice, invoiceProblem, paymentProblem, toE164 } from './bills';
 
 // A bill payment buys something for a phone number or meter and can't be undone,
 // so these are the checks that run before an invoice is created and before the
@@ -92,5 +92,44 @@ describe('paymentProblem', () => {
     expect('problem' in paymentProblem({ id: 'inv_1', payment: { ...payment, price: 0 } }, 100)).toBe(true);
     expect('problem' in paymentProblem({ payment }, 100)).toBe(true);
     expect('problem' in paymentProblem(null, 100)).toBe(true);
+  });
+});
+
+describe('toE164 — people do not type their own country code', () => {
+  it('adds the dial code and drops the trunk zero', () => {
+    expect(toE164('09134829079', 'NG')).toBe('+2349134829079');
+    expect(toE164('0803 123 4567', 'NG')).toBe('+2348031234567');
+    expect(toE164('0712345678', 'KE')).toBe('+254712345678');
+  });
+
+  it('leaves a number that already has its code alone', () => {
+    expect(toE164('+2349134829079', 'NG')).toBe('+2349134829079');
+    expect(toE164('2349134829079', 'NG')).toBe('+2349134829079');
+    expect(toE164('+234 913 482 9079', 'NG')).toBe('+2349134829079');
+  });
+
+  it('returns the number untouched when the country is unknown', () => {
+    expect(toE164('09134829079', undefined)).toBe('09134829079');
+    expect(toE164('09134829079', 'ZZ')).toBe('09134829079');
+  });
+});
+
+describe('interpretPrice — Bitrefill quotes usdc_base in the smallest unit', () => {
+  it('reads a plain integer of 1000 or more as smallest-unit', () => {
+    expect(interpretPrice('160000')).toEqual({ usdc: 0.16, smallestUnit: true });
+    expect(interpretPrice('80000')).toEqual({ usdc: 0.08, smallestUnit: true });
+  });
+
+  it('takes a decimal at face value', () => {
+    expect(interpretPrice('0.16')).toEqual({ usdc: 0.16, smallestUnit: false });
+    expect(interpretPrice('12.5')).toEqual({ usdc: 12.5, smallestUnit: false });
+  });
+
+  it('takes a small integer at face value', () => {
+    expect(interpretPrice('5')).toEqual({ usdc: 5, smallestUnit: false });
+  });
+
+  it('refuses anything that is not a positive number', () => {
+    for (const bad of ['', '0', '-5', 'free', null, undefined, {}]) expect(interpretPrice(bad)).toBeNull();
   });
 });

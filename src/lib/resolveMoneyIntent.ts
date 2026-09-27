@@ -123,6 +123,8 @@ export async function resolveCashOut(intent: CashOutIntent): Promise<ResolvedCas
 export interface ResolvedBill {
   category: BillCategory;
   product: BillProduct;
+  /** Two-letter country, for turning a local phone number into E.164 */
+  country: string;
   /** One of the product's fixed denominations, when it has them */
   packageId?: string;
   /** A value inside the product's range, otherwise */
@@ -147,7 +149,7 @@ async function pickProduct(intent: BillIntent, products: BillProduct[]): Promise
 
   // For a phone top-up, the number itself says which network it is
   if (intent.category === 'airtime' || intent.category === 'data') {
-    const operators = await fetchPhoneOperators(intent.recipient).catch(() => []);
+    const operators = await fetchPhoneOperators(intent.recipient, intent.country).catch(() => []);
     for (const operator of operators) {
       const match = products.find((p) => p.id === operator.id) ?? products.find((p) => normalise(p.name).includes(normalise(operator.name)));
       if (match) return match;
@@ -179,6 +181,7 @@ export async function resolveBill(intent: BillIntent): Promise<ResolvedBill> {
     return {
       category: intent.category,
       product,
+      country: intent.country,
       packageId: exact.id,
       recipient: intent.recipient,
       label: `${exact.value} ${product.currency} of ${product.name}`,
@@ -192,6 +195,7 @@ export async function resolveBill(intent: BillIntent): Promise<ResolvedBill> {
   return {
     category: intent.category,
     product,
+    country: intent.country,
     value: intent.amount,
     recipient: intent.recipient,
     label: `${intent.amount} ${product.currency} of ${product.name}`,

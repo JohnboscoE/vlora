@@ -68,10 +68,14 @@ export interface CreateInvoiceInput {
   productId: string;
   packageId?: string;
   value?: string;
-  /** Phone number in international format, or the meter/account number */
+  /** Phone number as typed, or the meter/account number */
   recipient: string;
   /** Where Bitrefill refunds if delivery fails — on Base, so the user's own address */
   refundAddress: string;
+  /** Two-letter country, so a local phone number can be given its dial code */
+  country?: string;
+  /** True for airtime and data: the server adds the dial code to a phone line */
+  phone?: boolean;
 }
 
 export const createBillInvoice = (input: CreateInvoiceInput) =>
@@ -82,8 +86,10 @@ export const createBillInvoice = (input: CreateInvoiceInput) =>
   });
 
 /** Which networks serve a phone number, so a top-up doesn't have to ask */
-export const fetchPhoneOperators = (number: string) =>
-  call<{ number: string; operators: { id: string; name: string }[] }>(`phone?number=${encodeURIComponent(number)}`).then((r) => r.operators);
+export const fetchPhoneOperators = (number: string, country = 'NG') =>
+  call<{ number: string; operators: { id: string; name: string }[] }>(
+    `phone?number=${encodeURIComponent(number)}&country=${encodeURIComponent(country)}`,
+  ).then((r) => r.operators);
 
 export const fetchBillInvoice = (id: string) =>
   call<{ invoice: BillInvoice }>(`invoice?id=${encodeURIComponent(id)}`).then((r) => r.invoice);

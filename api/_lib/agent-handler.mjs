@@ -347,6 +347,25 @@ function toProduct(raw) {
     } : {}
   };
 }
+var DIAL_CODES = {
+  NG: "234",
+  KE: "254",
+  GH: "233",
+  UG: "256",
+  TZ: "255",
+  ZA: "27",
+  US: "1",
+  GB: "44"
+};
+function toE164(raw, country) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("+")) return trimmed.replace(/[\s()-]/g, "");
+  const digits = trimmed.replace(/\D/g, "");
+  const code = DIAL_CODES[(country ?? "").toUpperCase()];
+  if (!code || digits === "") return trimmed;
+  if (digits.startsWith(code) && digits.length > code.length + 6) return `+${digits}`;
+  return `+${code}${digits.replace(/^0+/, "")}`;
+}
 function interpretPrice(raw) {
   const text = String(raw ?? "").trim();
   if (!/^\d+(\.\d+)?$/.test(text)) return null;
@@ -383,8 +402,9 @@ async function billProducts(category, country) {
   catalogue.set(key, { at: Date.now(), body: { products } });
   return products;
 }
-async function phoneOperators(number) {
-  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+async function phoneOperators(number, country) {
+  const dialled = toE164(number, country);
+  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(dialled)}`);
   if (status !== 200) return [];
   const data = body.data;
   const list = Array.isArray(data) ? data : data ? [data] : [];
@@ -670,7 +690,7 @@ async function runAgent(opts) {
       const named = provider?.toLowerCase().replace(/[^a-z0-9]/g, "");
       let product = named ? products.find((p) => p.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(named)) : void 0;
       if (!product && (category === "airtime" || category === "data")) {
-        const operators = await phoneOperators(recipient);
+        const operators = await phoneOperators(recipient, where);
         for (const operator of operators) {
           product = products.find((p) => p.id === operator.id) ?? products.find((p) => p.name.toLowerCase() === operator.name.toLowerCase());
           if (product) break;
@@ -689,11 +709,15 @@ async function runAgent(opts) {
         return `ERROR: ${product.name} takes between ${product.range.min} and ${product.range.max} ${product.currency}`;
       }
       const owner = await publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: "owner" });
+      const isPhone = category === "airtime" || category === "data";
       const created = await createInvoice({
         productId: product.id,
         ...packageId ? { packageId } : { value: amount },
-        recipient,
-        refundAddress: owner
+        // A phone line gets the country's dial code; a meter number is left alone
+        recipient: isPhone ? toE164(recipient, where) : recipient,
+        refundAddress: owner,
+        country: where,
+        ...isPhone ? { phone: true } : {}
       });
       if ("problem" in created) return `ERROR: ${created.problem}`;
       const cost = parseAmount(created.payment.price, usdc);

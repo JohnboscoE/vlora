@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { ChevronDown, Clock, Download, ExternalLink, History, Loader2, Share2, X } from 'lucide-react';
@@ -25,6 +25,16 @@ interface HistoryPanelProps {
 }
 
 const ORDER: ActivityKind[] = ['payment', 'swap', 'bridge', 'cashout', 'airtime', 'utilities', 'earn', 'deposit'];
+
+type TimeRange = 'all' | '1d' | '7d' | '30d' | 'custom';
+
+const RANGE_LABELS: Record<TimeRange, string> = {
+  all: 'All',
+  '1d': '24h',
+  '7d': '7 days',
+  '30d': '30 days',
+  custom: 'Dates',
+};
 
 /** "4 min" / "40 sec", for the progress line */
 const formatLeft = (seconds: number) => (seconds >= 90 ? `${Math.round(seconds / 60)} min` : `${seconds} sec`);
@@ -59,6 +69,16 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
     () => loadActivity(undefined),
   );
   const [filter, setFilter] = useState<ActivityKind | 'all'>('all');
+  const [range, setRange] = useState<TimeRange>('all');
+  // "Last 24 hours" is relative to a clock that moves, so it lives in state and
+  // ticks on a timer rather than being read while rendering
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanProgress | null>(null);
   const cancelScan = useRef<AbortController | null>(null);
@@ -104,7 +124,48 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
   };
 
   const kinds = useMemo(() => ORDER.filter((k) => entries.some((e) => e.kind === k)), [entries]);
-  const shown = filter === 'all' ? entries : entries.filter((e) => e.kind === filter);
+
+  // The window the list covers. Custom dates are read as whole local days, so
+  // picking today as the end includes everything done today.
+  const window = useMemo(() => {
+    if (range === 'all') return null;
+    if (range === 'custom') {
+      const start = customFrom ? new Date(`${customFrom}T00:00:00`).getTime() : 0;
+      const end = customTo ? new Date(`${customTo}T23:59:59.999`).getTime() : now;
+      return Number.isFinite(start) && Number.isFinite(end) && end >= start ? { start, end } : null;
+    }
+    const days = range === '1d' ? 1 : range === '7d' ? 7 : 30;
+    return { start: now - days * 86_400_000, end: now };
+  }, [range, customFrom, customTo, now]);
+
+  const shown = useMemo(
+    () =>
+      entries.filter(
+        (entry) =>
+          (filter === 'all' || entry.kind === filter) && (window == null || (entry.at >= window.start && entry.at <= window.end)),
+      ),
+    [entries, filter, window],
+  );
+
+  /** What left the wallet in view, so a period has a figure and not just rows */
+  const spent = useMemo(() => {
+    const byToken = new Map<string, number>();
+    for (const entry of shown) {
+      if (!entry.amount || entry.status === 'failed') continue;
+      // Money coming in is not money spent
+      if (/^received/i.test(entry.title)) continue;
+      const token = entry.token ?? 'USDC';
+      byToken.set(token, (byToken.get(token) ?? 0) + Number(entry.amount));
+    }
+    return [...byToken.entries()]
+      .filter(([, total]) => total > 0)
+      .map(([token, total]) => `${total.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${token}`)
+      .join(' · ');
+  }, [shown]);
+
+  // Asking for a month when only a week has been read back is worth saying
+  const oldest = entries.length > 0 ? Math.min(...entries.map((e) => e.at)) : null;
+  const beyondWhatWeHave = window != null && oldest != null && window.start < oldest - 86_400_000;
 
   const save = async (entry: ActivityEntry, mode: 'share' | 'download') => {
     setBusy(entry.id);
@@ -161,8 +222,55 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
         </p>
       ) : (
         <>
+          <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
+            {(Object.keys(RANGE_LABELS) as TimeRange[]).map((option) => (
+              <button
+                key={option}
+                onClick={() => setRange(option)}
+                className={cn(
+                  'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+                  range === option ? 'border-brand/40 bg-brand/10 text-brand' : 'border-line/15 text-muted',
+                )}
+              >
+                {RANGE_LABELS[option]}
+              </button>
+            ))}
+          </div>
+
+          {range === 'custom' && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <label className="block text-[11px] text-muted">
+                From
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                />
+              </label>
+              <label className="block text-[11px] text-muted">
+                To
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                />
+              </label>
+            </div>
+          )}
+
+          <p className="mt-2 text-[11px] text-muted">
+            {shown.length === 0
+              ? 'Nothing in this period.'
+              : `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}${spent ? ` · ${spent} out` : ''}`}
+            {beyondWhatWeHave && ' · earlier days may not be read from Arc yet'}
+          </p>
+
           {kinds.length > 1 && (
-            <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
+            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
               {(['all', ...kinds] as const).map((kind) => (
                 <button
                   key={kind}

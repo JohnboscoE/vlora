@@ -158,6 +158,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
         {
           category,
           product,
+          country,
           ...(packageId ? { packageId } : { value }),
           recipient,
           label: `${chosen ? `${chosen} ${product.currency} of ` : ''}${product.name}`,

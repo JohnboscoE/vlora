@@ -21,7 +21,7 @@ import {
   type Token,
 } from './chain';
 import { limitProblem, parseTokenAmount, RecipientGuard, type VaultLimits } from './guards';
-import { billProducts, createInvoice, phoneOperators, type BillProduct } from './bills';
+import { billProducts, createInvoice, phoneOperators, toE164, type BillProduct } from './bills';
 import { bridgeFromAgent, DESTINATION_LABEL } from './bridge';
 
 // Cheapest current model: the agent only maps a request onto a few tools, and the
@@ -310,7 +310,7 @@ export async function runAgent(opts: {
       let product = named ? products.find((p) => p.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(named)) : undefined;
       if (!product && (category === 'airtime' || category === 'data')) {
         // The number itself says which network it is
-        const operators = await phoneOperators(recipient);
+        const operators = await phoneOperators(recipient, where);
         for (const operator of operators) {
           product = products.find((p) => p.id === operator.id) ?? products.find((p) => p.name.toLowerCase() === operator.name.toLowerCase());
           if (product) break;
@@ -333,11 +333,15 @@ export async function runAgent(opts: {
 
       // A refund from Bitrefill should reach the owner, not the agent
       const owner = await publicClient.readContract({ address: opts.vault, abi: vaultAbi, functionName: 'owner' });
+      const isPhone = category === 'airtime' || category === 'data';
       const created = await createInvoice({
         productId: product.id,
         ...(packageId ? { packageId } : { value: amount }),
-        recipient,
+        // A phone line gets the country's dial code; a meter number is left alone
+        recipient: isPhone ? toE164(recipient, where) : recipient,
         refundAddress: owner,
+        country: where,
+        ...(isPhone ? { phone: true } : {}),
       });
       if ('problem' in created) return `ERROR: ${created.problem}`;
 

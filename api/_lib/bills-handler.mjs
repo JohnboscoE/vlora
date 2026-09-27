@@ -148,12 +148,33 @@ function toProduct(raw) {
     } : {}
   };
 }
+var DIAL_CODES = {
+  NG: "234",
+  KE: "254",
+  GH: "233",
+  UG: "256",
+  TZ: "255",
+  ZA: "27",
+  US: "1",
+  GB: "44"
+};
+function toE164(raw, country) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("+")) return trimmed.replace(/[\s()-]/g, "");
+  const digits = trimmed.replace(/\D/g, "");
+  const code = DIAL_CODES[(country ?? "").toUpperCase()];
+  if (!code || digits === "") return trimmed;
+  if (digits.startsWith(code) && digits.length > code.length + 6) return `+${digits}`;
+  return `+${code}${digits.replace(/^0+/, "")}`;
+}
 function invoiceProblem(payload) {
   const productId = str(payload?.productId).trim();
   const packageId = str(payload?.packageId).trim();
   const value = str(payload?.value).trim();
   const typed = str(payload?.recipient).trim();
-  const recipient = typed.startsWith("+") ? typed.replace(/[\s()-]/g, "") : typed.replace(/[\s()]/g, "");
+  const country = str(payload?.country).toUpperCase();
+  const phone = payload?.phone === true;
+  const recipient = phone ? toE164(typed, country) : typed.startsWith("+") ? typed.replace(/[\s()-]/g, "") : typed.replace(/[\s()]/g, "");
   const refundAddress = str(payload?.refundAddress).trim();
   if (!PRODUCT_ID.test(productId)) return { problem: "Pick something to pay for." };
   if (!packageId && !value) return { problem: "Pick an amount." };
@@ -161,7 +182,17 @@ function invoiceProblem(payload) {
   if (packageId && !packageId.startsWith(productId)) return { problem: "That amount does not belong to this product." };
   if (!RECIPIENT.test(recipient)) return { problem: "Check the phone or meter number." };
   if (!isAddress(refundAddress)) return { problem: "A refund address is required." };
-  return { invoice: { productId, ...packageId ? { packageId } : {}, ...value ? { value } : {}, recipient, refundAddress } };
+  return {
+    invoice: {
+      productId,
+      ...packageId ? { packageId } : {},
+      ...value ? { value } : {},
+      recipient,
+      refundAddress,
+      ...country ? { country } : {},
+      ...phone ? { phone } : {}
+    }
+  };
 }
 function interpretPrice(raw) {
   const text = String(raw ?? "").trim();
@@ -221,8 +252,9 @@ async function billProducts(category, country) {
   catalogue.set(key, { at: Date.now(), body: { products } });
   return products;
 }
-async function phoneOperators(number) {
-  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
+async function phoneOperators(number, country) {
+  const dialled = toE164(number, country);
+  const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(dialled)}`);
   if (status !== 200) return [];
   const data = body.data;
   const list = Array.isArray(data) ? data : data ? [data] : [];
@@ -304,7 +336,8 @@ async function handleBills(route, request) {
     return json(200, { product });
   }
   if (route === "phone") {
-    const number = str(url.searchParams.get("number")).replace(/[\s()-]/g, "");
+    const country = str(url.searchParams.get("country")).toUpperCase();
+    const number = toE164(str(url.searchParams.get("number")), country).replace(/[\s()-]/g, "");
     if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: "that does not look like a phone number" });
     const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
     if (status !== 200) return json(status === 429 ? 429 : 502, { error: problemText(body, status) });
@@ -341,5 +374,6 @@ export {
   maxUsdc,
   paymentProblem,
   phoneOperators,
-  plausiblePrice
+  plausiblePrice,
+  toE164
 };
