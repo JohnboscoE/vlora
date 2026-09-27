@@ -438,14 +438,16 @@ async function bridgeFromAgent(privateKey, recipient, amount) {
     ]);
     const adapter = createViemAdapterFromPrivateKey({ privateKey });
     const kit = new AppKit();
-    const result = await kit.bridge({
+    const bridgeParams = {
       from: { adapter, chain: SOURCE_CHAIN },
       // No adapter for the destination: Circle's forwarder submits the mint, so
       // the agent needs neither a second key nor gas on Base
-      to: { recipientAddress: recipient, chain: DESTINATION_CHAIN, useForwarder: true },
-      amount,
-      config: { feePayment: "source" }
-    });
+      to: { recipientAddress: recipient, chain: DESTINATION_CHAIN, useForwarder: true }
+    };
+    const estimate = await kit.estimateBridge({ ...bridgeParams, amount });
+    const fee = estimate.fees.reduce((total, f) => total + (f.amount ? Number(f.amount) : 0), 0);
+    const send = (Math.ceil((Number(amount) + fee) * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, "");
+    const result = await kit.bridge({ ...bridgeParams, amount: send });
     const burn = result.steps.find((s) => /burn|deposit|transfer/i.test(s.name) && s.txHash) ?? result.steps.find((s) => s.txHash);
     return {
       state: result.state,

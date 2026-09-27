@@ -230,7 +230,7 @@ Set it in `server/.env` (local, with `npm run agent`) or in Vercel's environment
 Paycrest settles on Base, Polygon, Arbitrum and a few other networks — **not on Arc yet**. So a cash-out is: create the order (`server/offramp.ts`), then bridge exactly what it asks for to the order's receive address on Base (`src/lib/bridge.ts`, Circle App Kit + CCTP). Two details keep that to a single signature on Arc:
 
 - `useForwarder` lets Circle's relayer submit the mint on Base, so the user never needs ETH there.
-- `feePayment: 'source'` charges the CCTP and forwarding fees on Arc, so the **exact** amount Paycrest quoted arrives.
+- The relayer's fee comes out of what is minted, and Arc doesn't allow source-paid fees, so Vlora adds it on top: the **exact** amount Paycrest quoted arrives. It is flat per transfer (about 0.055 USDC), not a percentage.
 
 This detour is temporary and the app says so before you confirm. When Paycrest lists Arc — the mechanism already exists, they run Solana as a bridge rail into Base — the `NETWORK` constant in `server/offramp.ts` changes and the bridge step disappears.
 

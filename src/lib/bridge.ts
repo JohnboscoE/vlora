@@ -8,9 +8,9 @@
  * - `useForwarder` lets Circle's relayer submit the mint on the destination
  *   chain, so the user signs once, on Arc, and pays gas in USDC. They never need
  *   ETH on Base.
- * - `feePayment: 'source'` takes the CCTP and forwarding fees out of the Arc
- *   wallet instead of the minted amount, so **exactly** `amount` arrives. That
- *   matters when a payout provider is waiting for an exact figure.
+ * - The relayer's fee comes out of what is minted on the far side — App Kit
+ *   refuses source-paid fees from Arc — so `bridgeExact` adds it on top, and a
+ *   payout provider waiting on an exact figure gets exactly that figure.
  *
  * Everything is signed by the user's own wallet; Vlora never holds the funds.
  */
@@ -53,8 +53,6 @@ function params(recipientAddress: string, amount: string, adapter: Awaited<Retur
     // user needs neither a second signature nor gas on the destination chain.
     to: { recipientAddress, chain: BRIDGE_CHAIN, useForwarder: true as const },
     amount,
-    // Pay fees on Arc so the recipient is credited the exact amount
-    config: { feePayment: 'source' as const },
   };
 }
 
@@ -71,15 +69,56 @@ export async function estimateBridgeOut(recipientAddress: string, amount: string
   const gasAmount = gas?.fees ? String((gas.fees as { total?: string; amount?: string }).total ?? (gas.fees as { amount?: string }).amount ?? '') : '';
   return {
     amount,
-    fees: fees.toFixed(6).replace(/\.?0+$/, ''),
+    fees: roundUp(fees),
     gas: gasAmount || null,
-    total: (Number(amount) + fees).toFixed(6).replace(/\.?0+$/, ''),
+    total: roundUp(Number(amount) + fees),
   };
+}
+
+/** Six decimals, the most USDC can carry, rounded up so a payee is never short */
+function roundUp(value: number): string {
+  return (Math.ceil(value * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+}
+
+/**
+ * What to send so that exactly `exactAmount` arrives.
+ *
+ * Bridging out of Arc, the fee comes off the amount minted on the far side —
+ * App Kit refuses source-paid fees from Arc — so the fee has to be added on top
+ * here. It is a flat relayer fee (about 0.055 USDC at the time of writing),
+ * quoted per transfer rather than as a percentage, so the estimate is taken
+ * twice: once for the amount, once for the grossed-up amount, and the larger
+ * fee wins.
+ */
+export async function grossUpForExact(recipientAddress: string, exactAmount: string): Promise<{ send: string; fee: string }> {
+  const kit = await appKit();
+  const adapter = await walletAdapter();
+  const quote = async (amount: string) => {
+    const estimate = await kit.estimateBridge(params(recipientAddress, amount, adapter));
+    return sum(estimate.fees.map((f) => f.amount));
+  };
+  const first = await quote(exactAmount);
+  const grossed = roundUp(Number(exactAmount) + first);
+  // A flat fee shouldn't move, but a percentage one would: re-quote and take the worse
+  const second = await quote(grossed).catch(() => first);
+  const fee = Math.max(first, second);
+  return { send: roundUp(Number(exactAmount) + fee), fee: roundUp(fee) };
+}
+
+/**
+ * Deliver exactly `exactAmount` USDC to `recipientAddress` on the destination
+ * chain, paying the relayer fee on top. One signature on Arc; the mint is relayed.
+ */
+export async function bridgeExact(recipientAddress: string, exactAmount: string): Promise<BridgeOutcome & { sent: string; fee: string }> {
+  const { send, fee } = await grossUpForExact(recipientAddress, exactAmount);
+  const outcome = await bridgeOut(recipientAddress, send);
+  return { ...outcome, sent: send, fee };
 }
 
 /**
  * Move `amount` USDC from the connected Arc wallet to `recipientAddress` on the
- * destination chain. One signature on Arc; the mint is relayed.
+ * destination chain. What arrives is `amount` minus the relayer fee — use
+ * `bridgeExact` when a payee expects an exact figure.
  */
 export async function bridgeOut(recipientAddress: string, amount: string): Promise<BridgeOutcome> {
   const kit = await appKit();

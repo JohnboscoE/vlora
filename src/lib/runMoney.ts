@@ -11,7 +11,7 @@
  * run the very same code.
  */
 import type { Address } from 'viem';
-import { bridgeOut, BRIDGE_CHAIN_LABEL } from '@/lib/bridge';
+import { bridgeExact, BRIDGE_CHAIN_LABEL } from '@/lib/bridge';
 import { createOfframpOrder, orderTotal, type OfframpOrder } from '@/lib/offramp';
 import { amountToPay, createBillInvoice, type BillCategory, type BillInvoice } from '@/lib/bills';
 import { recordActivity, updateActivity } from '@/lib/activity';
@@ -66,7 +66,7 @@ export async function runCashOut(address: Address, plan: ResolvedCashOut, onStep
 
   onStep(`Sending ${total} USDC to the payout account on ${BRIDGE_CHAIN_LABEL}…`);
   try {
-    const result = await bridgeOut(order.providerAccount.receiveAddress, total);
+    const result = await bridgeExact(order.providerAccount.receiveAddress, total);
     if (result.state === 'error') throw new Error('The transfer did not complete. Nothing was paid out.');
     if (result.sourceTxHash) updateActivity(address, entryId, { txHash: result.sourceTxHash });
     return { order, entryId, ...(result.sourceTxHash ? { txHash: result.sourceTxHash } : {}) };
@@ -116,7 +116,7 @@ export async function runBillPayment(address: Address, plan: ResolvedBill, onSte
 
   onStep(`Paying ${total} USDC on ${BRIDGE_CHAIN_LABEL}…`);
   try {
-    const result = await bridgeOut(created.payment.address, total);
+    const result = await bridgeExact(created.payment.address, total);
     if (result.state === 'error') throw new Error('The payment did not complete. Nothing was delivered.');
     if (result.sourceTxHash) updateActivity(address, entryId, { txHash: result.sourceTxHash });
     return { invoice: created.invoice, entryId, ...(result.sourceTxHash ? { txHash: result.sourceTxHash } : {}) };

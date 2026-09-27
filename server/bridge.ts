@@ -26,9 +26,11 @@ export interface BridgeOutcome {
  * Send `amount` USDC from the agent's key on Arc to `recipient` on Base.
  *
  * Fees and gas come from the agent's own balance, not from `amount`: the owner's
- * money pays the bill and nothing else.
+ * money pays the bill and nothing else. `amount` is what the invoice must
+ * receive; the relayer's fee is added on top before sending.
  */
 export async function bridgeFromAgent(privateKey: string, recipient: string, amount: string): Promise<BridgeOutcome> {
+  // `amount` is what must arrive; the fee is added on top, from the agent's balance
   try {
     const [{ AppKit }, { createViemAdapterFromPrivateKey }] = await Promise.all([
       import('@circle-fin/app-kit'),
@@ -36,14 +38,18 @@ export async function bridgeFromAgent(privateKey: string, recipient: string, amo
     ]);
     const adapter = createViemAdapterFromPrivateKey({ privateKey });
     const kit = new AppKit();
-    const result = await kit.bridge({
+    const bridgeParams = {
       from: { adapter, chain: SOURCE_CHAIN },
       // No adapter for the destination: Circle's forwarder submits the mint, so
       // the agent needs neither a second key nor gas on Base
       to: { recipientAddress: recipient, chain: DESTINATION_CHAIN, useForwarder: true },
-      amount,
-      config: { feePayment: 'source' },
-    });
+    };
+    // The relayer's fee comes out of what is minted (Arc doesn't allow source-paid
+    // fees), so it goes on top here and the invoice receives the exact amount
+    const estimate = await kit.estimateBridge({ ...bridgeParams, amount });
+    const fee = estimate.fees.reduce((total, f) => total + (f.amount ? Number(f.amount) : 0), 0);
+    const send = (Math.ceil((Number(amount) + fee) * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+    const result = await kit.bridge({ ...bridgeParams, amount: send });
     const burn = result.steps.find((s) => /burn|deposit|transfer/i.test(s.name) && s.txHash) ?? result.steps.find((s) => s.txHash);
     return {
       state: result.state,

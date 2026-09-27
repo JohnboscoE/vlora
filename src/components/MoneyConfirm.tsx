@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
 import { Banknote, Loader2, Receipt } from 'lucide-react';
 import { ACTIVE_CHAIN } from '@/chain-env';
-import { BRIDGE_CHAIN_LABEL } from '@/lib/bridge';
+import { BRIDGE_CHAIN_LABEL, estimateBridgeOut } from '@/lib/bridge';
 import type { ResolvedBill, ResolvedCashOut } from '@/lib/resolveMoneyIntent';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +27,22 @@ const money = (value: string | number, currency: string) =>
  * press — the panels are for browsing, not for the common case.
  */
 export function MoneyConfirm({ pending, onConfirm, onCancel, busy, step }: MoneyConfirmProps) {
+  const { address } = useAccount();
+  // The relayer's fee for moving USDC to Base is flat per transfer, so it can be
+  // quoted against any address — and on a small bill it is most of the cost
+  const [fee, setFee] = useState<string | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let alive = true;
+    void estimateBridgeOut(address, '1').then(
+      (estimate) => alive && setFee(estimate.fees),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [address]);
+
   const rows: [string, string][] =
     pending.kind === 'cashout'
       ? [
@@ -39,6 +57,7 @@ export function MoneyConfirm({ pending, onConfirm, onCancel, busy, step }: Money
           ['For', pending.plan.recipient],
           ['Delivered by', `Bitrefill · ${pending.plan.product.country}`],
         ];
+  if (fee) rows.push(['Network fee', `${fee} USDC to move it to ${BRIDGE_CHAIN_LABEL}`]);
 
   const title = pending.kind === 'cashout' ? 'Cash out to a bank' : 'Pay with USDC';
   const Icon = pending.kind === 'cashout' ? Banknote : Receipt;
