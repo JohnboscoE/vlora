@@ -256,14 +256,17 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
     if (!/^\+?\d{7,15}$/.test(number)) return json(400, { error: 'that does not look like a phone number' });
     const { status, body } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
     if (status !== 200) return json(status === 429 ? 429 : 502, { error: problemText(body, status) });
-    const data = body.data as { phone_number?: string; operators?: unknown[] } | undefined;
-    const operators = (Array.isArray(data?.operators) ? data.operators : [])
+    // `data` is the operator's product, or several when the number is ambiguous
+    const data = body.data;
+    const list = Array.isArray(data) ? data : data ? [data] : [];
+    const operators = list
       .map((o) => {
         const row = o as Record<string, unknown>;
         return { id: str(row.id), name: str(row.name) || str(row.id) };
       })
       .filter((o) => o.id !== '');
-    return json(200, { number: str(data?.phone_number) || number, operators });
+    const meta = body.meta as { phone_number?: unknown } | undefined;
+    return json(200, { number: str(meta?.phone_number) || number, operators });
   }
 
   if (route === 'invoice') {

@@ -216,11 +216,13 @@ async function handleBills(route, request) {
     const { status: status2, body: body2 } = await bitrefill(`/check_phone_number?phone_number=${encodeURIComponent(number)}`);
     if (status2 !== 200) return json(status2 === 429 ? 429 : 502, { error: problemText(body2, status2) });
     const data = body2.data;
-    const operators = (Array.isArray(data?.operators) ? data.operators : []).map((o) => {
+    const list = Array.isArray(data) ? data : data ? [data] : [];
+    const operators = list.map((o) => {
       const row = o;
       return { id: str(row.id), name: str(row.name) || str(row.id) };
     }).filter((o) => o.id !== "");
-    return json(200, { number: str(data?.phone_number) || number, operators });
+    const meta = body2.meta;
+    return json(200, { number: str(meta?.phone_number) || number, operators });
   }
   if (route === "invoice") {
     const id = str(url.searchParams.get("id"));
