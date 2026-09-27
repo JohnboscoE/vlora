@@ -84,7 +84,7 @@ Rules:
 - Recipients must be a 0x address or a .arc name the owner typed. If they refer to someone without an address or name, ask for it instead of guessing.
 - The same holds for a phone or meter number: use only one the owner typed in their latest message. Never reuse a number from earlier in the conversation or from a tool result.
 - If the request is ambiguous (unclear amount, token or recipient), ask one short question instead of acting.
-- If a tool reports an error (limit reached, insufficient balance…), explain it plainly and don't retry with a different amount unless asked.
+- If a tool reports an error (limit reached, insufficient balance…), explain it plainly and don't retry with a different amount unless asked. Quote the reason the tool gave, word for word, rather than summarising it as a general problem: the owner needs the actual reason to fix it.
 - Amounts are in whole token units (e.g. "10" means 10 USDC).
 - Reply briefly in plain language: what you did, with amounts, or what you need.`;
 

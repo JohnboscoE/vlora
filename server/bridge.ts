@@ -54,11 +54,22 @@ export async function bridgeFromAgent(privateKey: string, recipient: string, amo
     return {
       state: result.state,
       ...(burn?.txHash ? { sourceTxHash: burn.txHash } : {}),
-      ...(result.state === 'error' ? { reason: result.steps.find((s) => s.errorMessage)?.errorMessage ?? 'the transfer did not complete' } : {}),
+      ...(result.state === 'error'
+        ? {
+            // Name the step and its error: "Mint failed: …" says far more than
+            // "the transfer did not complete"
+            reason:
+              result.steps
+                .filter((s) => s.state === 'error')
+                .map((s) => `${s.name}: ${s.errorMessage ?? 'failed'}`)
+                .join('; ') || 'the transfer did not complete',
+          }
+        : {}),
     };
   } catch (err) {
     const reason = err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : String(err);
-    console.error('[bridge] agent bridge failed', reason);
-    return { state: 'error', reason: reason.slice(0, 200) };
+    // The whole error goes to the logs; the caller gets enough to act on
+    console.error('[bridge] agent bridge failed', err);
+    return { state: 'error', reason: reason.slice(0, 300) };
   }
 }

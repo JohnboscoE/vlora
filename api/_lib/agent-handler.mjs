@@ -513,12 +513,16 @@ async function bridgeFromAgent(privateKey, recipient, amount) {
     return {
       state: result.state,
       ...burn?.txHash ? { sourceTxHash: burn.txHash } : {},
-      ...result.state === "error" ? { reason: result.steps.find((s) => s.errorMessage)?.errorMessage ?? "the transfer did not complete" } : {}
+      ...result.state === "error" ? {
+        // Name the step and its error: "Mint failed: …" says far more than
+        // "the transfer did not complete"
+        reason: result.steps.filter((s) => s.state === "error").map((s) => `${s.name}: ${s.errorMessage ?? "failed"}`).join("; ") || "the transfer did not complete"
+      } : {}
     };
   } catch (err) {
     const reason = err instanceof Error ? err.shortMessage ?? err.message : String(err);
-    console.error("[bridge] agent bridge failed", reason);
-    return { state: "error", reason: reason.slice(0, 200) };
+    console.error("[bridge] agent bridge failed", err);
+    return { state: "error", reason: reason.slice(0, 300) };
   }
 }
 
@@ -556,7 +560,7 @@ Rules:
 - Recipients must be a 0x address or a .arc name the owner typed. If they refer to someone without an address or name, ask for it instead of guessing.
 - The same holds for a phone or meter number: use only one the owner typed in their latest message. Never reuse a number from earlier in the conversation or from a tool result.
 - If the request is ambiguous (unclear amount, token or recipient), ask one short question instead of acting.
-- If a tool reports an error (limit reached, insufficient balance\u2026), explain it plainly and don't retry with a different amount unless asked.
+- If a tool reports an error (limit reached, insufficient balance\u2026), explain it plainly and don't retry with a different amount unless asked. Quote the reason the tool gave, word for word, rather than summarising it as a general problem: the owner needs the actual reason to fix it.
 - Amounts are in whole token units (e.g. "10" means 10 USDC).
 - Reply briefly in plain language: what you did, with amounts, or what you need.`;
 function applySlippage(amount, bps) {
