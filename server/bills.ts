@@ -485,24 +485,17 @@ export async function handleBills(route: BillsRoute, request: Request): Promise<
   if (rateLimited(route)) return json(429, { error: 'Too many requests — try again in a minute.' });
 
   if (route === 'products') {
-    const category = CATEGORIES[str(url.searchParams.get('category'))];
+    const category = str(url.searchParams.get('category'));
     const country = str(url.searchParams.get('country')).toUpperCase();
-    if (!category) return json(400, { error: 'unknown category' });
+    if (!CATEGORIES[category]) return json(400, { error: 'unknown category' });
     if (!/^[A-Z]{2}$/.test(country)) return json(400, { error: 'country must be a 2-letter code' });
-
-    const key = `${country}:${category}`;
-    const hit = catalogue.get(key);
-    if (hit && Date.now() - hit.at < CACHE_MS) return json(200, hit.body);
-
-    const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(category)}&limit=50`);
-    if (status !== 200) return json(status === 401 ? 503 : 502, { error: problemText(body, status) });
-    const products = (Array.isArray(body.data) ? body.data : [])
-      .map(toProduct)
-      .filter((p): p is BillProduct => p != null && p.inStock)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const payload = { products };
-    catalogue.set(key, { at: Date.now(), body: payload });
-    return json(200, payload);
+    try {
+      // One implementation, shared with the agent: fetch the country's catalogue
+      // and sort it here, since Bitrefill's own categories don't match reality
+      return json(200, { products: await billProducts(category, country) });
+    } catch (err) {
+      return json(502, { error: err instanceof Error ? err.message : 'could not read the catalogue' });
+    }
   }
 
   if (route === 'product') {

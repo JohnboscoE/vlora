@@ -358,19 +358,15 @@ async function handleBills(route, request) {
   }
   if (rateLimited(route)) return json(429, { error: "Too many requests \u2014 try again in a minute." });
   if (route === "products") {
-    const category = CATEGORIES[str(url.searchParams.get("category"))];
+    const category = str(url.searchParams.get("category"));
     const country = str(url.searchParams.get("country")).toUpperCase();
-    if (!category) return json(400, { error: "unknown category" });
+    if (!CATEGORIES[category]) return json(400, { error: "unknown category" });
     if (!/^[A-Z]{2}$/.test(country)) return json(400, { error: "country must be a 2-letter code" });
-    const key = `${country}:${category}`;
-    const hit = catalogue.get(key);
-    if (hit && Date.now() - hit.at < CACHE_MS) return json(200, hit.body);
-    const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(category)}&limit=50`);
-    if (status !== 200) return json(status === 401 ? 503 : 502, { error: problemText(body, status) });
-    const products = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p) => p != null && p.inStock).sort((a, b) => a.name.localeCompare(b.name));
-    const payload2 = { products };
-    catalogue.set(key, { at: Date.now(), body: payload2 });
-    return json(200, payload2);
+    try {
+      return json(200, { products: await billProducts(category, country) });
+    } catch (err) {
+      return json(502, { error: err instanceof Error ? err.message : "could not read the catalogue" });
+    }
   }
   if (route === "product") {
     const id = str(url.searchParams.get("id"));
