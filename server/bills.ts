@@ -327,24 +327,25 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
 /**
  * Which of our tabs a product belongs in.
  *
- * Bitrefill's own category strings are inconsistent — asking for "Electricity"
- * or "TV" returned nothing for Nigeria while the products plainly exist — so the
- * catalogue is fetched per country and sorted here, on the product's type and
- * name, which are stable. Anything we can't place stays out rather than landing
- * in the wrong tab.
+ * Bitrefill's own category strings don't match reality — asking for
+ * "Electricity" or "TV" in Nigeria returned nothing while the products plainly
+ * exist — and the `type` field comes back empty, so neither can be trusted. The
+ * catalogue is fetched per country and sorted here on two things that are always
+ * present: the product's name, and whether it wants a phone line or an account
+ * number. Anything we can't place stays out rather than landing in the wrong tab.
  */
 export function classify(product: BillProduct): string | null {
   const name = product.name.toLowerCase();
-  // Name first, because it is the only thing that separates a data bundle from
-  // airtime or a TV package from an electricity meter
+  // Name first: it is the only thing separating a data bundle from airtime, or a
+  // TV package from an electricity meter
   if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return 'exams';
-  if (/dstv|gotv|startimes|showmax|decoder|tv/.test(name)) return 'tv';
+  if (/dstv|gotv|startimes|showmax|decoder|\btv\b/.test(name)) return 'tv';
   if (/electric|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
     return 'electricity';
   }
-  if (/data|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';
-  // Then what the product asks for. Bitrefill sends no `type`, but it always
-  // says whether it needs a phone line or an account number.
+  if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';
+  // Then what the product asks for. Bitrefill sends no usable `type`, but it
+  // always says whether it needs a phone number or an account number.
   if (product.recipientType === 'phone_number') return 'airtime';
   if (product.recipientType === 'account') return 'utilities';
   return null;

@@ -419,11 +419,11 @@ function paymentProblem(invoice, max = maxUsdc()) {
 function classify(product) {
   const name = product.name.toLowerCase();
   if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return "exams";
-  if (/dstv|gotv|startimes|showmax|decoder|tv/.test(name)) return "tv";
+  if (/dstv|gotv|startimes|showmax|decoder|\btv\b/.test(name)) return "tv";
   if (/electric|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
     return "electricity";
   }
-  if (/data|bundle|internet|broadband|spectranet|smile/.test(name)) return "data";
+  if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return "data";
   if (product.recipientType === "phone_number") return "airtime";
   if (product.recipientType === "account") return "utilities";
   return null;

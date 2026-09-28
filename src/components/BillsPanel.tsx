@@ -333,6 +333,14 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
             </label>
           </div>
 
+          {products != null && products.length === 0 && (
+            <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+              {category === 'exams'
+                ? `Exam PINs aren't available through Bitrefill in ${COUNTRIES.find((c) => c.code === country)?.name ?? country} — WAEC, JAMB and NECO need a Nigerian biller, which is coming. Airtime, data, electricity and TV work today.`
+                : `Nothing is listed for this in ${COUNTRIES.find((c) => c.code === country)?.name ?? country} right now. Try another category or country.`}
+            </p>
+          )}
+
           {product && (
             <>
               {product.packages.length > 0 ? (

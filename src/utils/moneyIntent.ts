@@ -119,7 +119,7 @@ export function parseCashOut(input: string): CashOutIntent | null {
 }
 
 function billCategory(text: string): BillCategoryName | null {
-  if (/(waec|jamb|neco|nabteb|exam pin|result checker|scratch card)/i.test(text)) return 'exams';
+  if (/\b(waec|jamb|neco|nabteb|exam pin|result checker|scratch card)\b/i.test(text)) return 'exams';
   if (/\b(dstv|gotv|startimes|go\s?tv|tv\s?(sub|subscription)?)\b/i.test(text)) return 'tv';
   if (/\b(electricity|nepa|light|power|disco|prepaid|meter|ikeja|eko|aedc|phed|kedco|ibedc|bedc|eedc|jed|kaedco)\b/i.test(text)) return 'electricity';
   if (/\b(data|mb|gb|bundle|bundles)\b/i.test(text)) return 'data';
