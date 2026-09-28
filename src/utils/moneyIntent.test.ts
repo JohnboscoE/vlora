@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBill, parseCashOut } from './moneyIntent';
+import { parseBill, parseCashOut, parseSweep } from './moneyIntent';
 
 // These decide what a typed message means before any money is quoted, so the
 // cases that matter are the ones where a wrong reading would cost someone: an
@@ -107,5 +107,37 @@ describe('parseBill', () => {
     expect(parseBill('buy airtime')).toBeNull();
     expect(parseBill('buy 500 airtime')).toBeNull();
     expect(parseBill('send 10 usdc to 0x1234567890123456789012345678901234567890')).toBeNull();
+  });
+});
+
+describe('parseSweep — emptying a wallet needs both "all" and a destination', () => {
+  const ADDRESS = '0x1234567890123456789012345678901234567890';
+
+  it('reads a sweep with an address', () => {
+    for (const text of [
+      `send everything to ${ADDRESS}`,
+      `move all my funds to ${ADDRESS}`,
+      `transfer all my assets to ${ADDRESS}`,
+      `sweep my wallet to ${ADDRESS}`,
+      `empty my wallet to ${ADDRESS}`,
+    ]) {
+      expect(parseSweep(text)).toEqual({ type: 'sweep', to: ADDRESS });
+    }
+  });
+
+  it('refuses without a destination — the dangerous half of the sentence', () => {
+    expect(parseSweep('send everything')).toBeNull();
+    expect(parseSweep('move all my funds')).toBeNull();
+    expect(parseSweep('sweep my wallet')).toBeNull();
+  });
+
+  it('leaves an ordinary send alone', () => {
+    expect(parseSweep(`send 10 USDC to ${ADDRESS}`)).toBeNull();
+    expect(parseSweep(`pay 5 EURC to ${ADDRESS}`)).toBeNull();
+  });
+
+  it('leaves questions alone', () => {
+    expect(parseSweep('how do I send everything to another wallet?')).toBeNull();
+    expect(parseSweep('can i move all my assets?')).toBeNull();
   });
 });

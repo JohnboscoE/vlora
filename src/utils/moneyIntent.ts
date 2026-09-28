@@ -166,3 +166,37 @@ export function parseBill(input: string): BillIntent | null {
     country: findCountry(text),
   };
 }
+
+export interface SweepIntent {
+  type: 'sweep';
+  /** Where everything goes. Always an address by the time this is built. */
+  to: string;
+}
+
+/**
+ * "send everything to 0x…", "move all my funds to 0x…".
+ *
+ * Deliberately narrow, because this empties a wallet: it fires only when the
+ * message says both *all* and *where*, with a real address. "Send everything"
+ * on its own is not a command, it is half of one.
+ */
+export function parseSweep(input: string): SweepIntent | null {
+  const text = input.trim();
+  // A question about sweeping is not a sweep
+  if (/\b(how|what|can i|does|should|is it)\b/i.test(text) && !/\b(send|move|transfer|sweep|empty)\b/i.test(text)) return null;
+
+  const saysAll = /\b(everything|all|sweep|empty)\b/i.test(text);
+  const saysMove = /\b(send|move|transfer|sweep|withdraw|empty)\b/i.test(text);
+  if (!saysAll || !saysMove) return null;
+
+  const to = text.match(/\b0x[a-fA-F0-9]{40}\b/);
+  if (!to) return null;
+
+  // "send 10 USDC to 0x…" is an ordinary send, even if the word "all" is nearby.
+  // An amount anywhere in the message means the person named a figure, so this
+  // is not "everything".
+  const withoutAddress = text.replace(/0x[a-fA-F0-9]+/g, ' ');
+  if (/\d/.test(withoutAddress)) return null;
+
+  return { type: 'sweep', to: to[0] };
+}

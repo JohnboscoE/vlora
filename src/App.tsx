@@ -21,7 +21,8 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { BillsPanel } from './components/BillsPanel';
 import type { BillCategory } from './lib/bills';
 import { MoneyConfirm, type MoneyPlan } from './components/MoneyConfirm';
-import { parseBill, parseCashOut } from './utils/moneyIntent';
+import { parseBill, parseCashOut, parseSweep } from './utils/moneyIntent';
+import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
 import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
 import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
@@ -71,13 +72,16 @@ import {
   usdcDomain,
   type TransferAuthorization,
 } from './lib/gasless';
-import { formatUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 import { describeWalletError } from './lib/walletError';
 import { batchSenderAbi, getBatchSenderAddress } from './batch-config';
 import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN } from './chain-env';
 import { config } from './config';
 
 // Minimum time the typing bubble shows before a reply
+/** Left behind on a sweep so the sweep itself can pay Arc's fees, in USDC */
+const SWEEP_GAS_RESERVE = '0.05';
+
 const THINK_MS = 650;
 
 const BATCH_LIVE = getBatchSenderAddress(ACTIVE_CHAIN_ID) != null;
@@ -114,6 +118,7 @@ const CHAT_REPLIES = {
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
     '• Cash out to a bank — "cash out 20 USDC to gtbank 0123456789" (or "/cashout" to browse)\n' +
+    '• Move everything — "send everything to 0x…" empties this wallet, after you confirm the address by hand\n' +
     '• Airtime, data and bills — "buy 500 airtime for 08012345678", "pay 5000 electricity for meter 04123456789"\n' +
     '• History and receipts — "/history" lists what you\'ve done and makes a receipt for any of it\n' +
     (SWAPS_LIVE
@@ -266,6 +271,8 @@ export default function App() {
   const [pendingMoney, setPendingMoney] = useState<MoneyPlan | null>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
   const [moneyStep, setMoneyStep] = useState('');
+  // "send everything to 0x…" — held until the address is confirmed by hand
+  const [pendingSweep, setPendingSweep] = useState<SweepPlan | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const wrongChain = isConnected && chainId !== ACTIVE_CHAIN_ID;
@@ -1266,7 +1273,79 @@ export default function App() {
    * against the live APIs and put one confirmation in front of the user,
    * instead of sending them to a form.
    */
+  /**
+   * "Send everything to 0x…".
+   *
+   * On Arc the gas token is USDC, so sweeping literally everything would leave
+   * nothing to pay for the sweep — a reserve stays behind, and the confirmation
+   * says so rather than silently sending less than "everything".
+   */
+  function planSweep(to: `0x${string}`): SweepPlan | null {
+    const tokens = getTokens(ACTIVE_CHAIN_ID);
+    const lines: SweepPlan['lines'] = [];
+    for (const token of tokens) {
+      const held = balances[token.symbol] ?? 0n;
+      if (held <= 0n) continue;
+      const isGasToken = token.address.toLowerCase() === (usdcFact?.address ?? '').toLowerCase();
+      // Enough for this sweep's transfers several times over, at Arc's fees
+      const reserve = isGasToken ? parseUnits(SWEEP_GAS_RESERVE, token.decimals) : 0n;
+      const sending = held > reserve ? held - reserve : 0n;
+      if (sending <= 0n) continue;
+      lines.push({
+        symbol: token.symbol,
+        amount: formatUnits(sending, token.decimals),
+        ...(reserve > 0n ? { reserved: formatUnits(reserve, token.decimals) } : {}),
+      });
+    }
+    return lines.length > 0 ? { to, lines } : null;
+  }
+
+  async function runSweep() {
+    if (!pendingSweep || !address) return;
+    const tokens = getTokens(ACTIVE_CHAIN_ID);
+    setMoneyBusy(true);
+    try {
+      for (const line of pendingSweep.lines) {
+        const token = tokens.find((t) => t.symbol === line.symbol);
+        if (!token) continue;
+        setMoneyStep(`Sending ${line.amount} ${line.symbol}…`);
+        // One signature per token: a partial failure leaves the rest untouched
+        await executeSend(token, pendingSweep.to, parseUnits(line.amount, token.decimals), line.amount);
+      }
+      setPendingSweep(null);
+      addMessage(agentMsg(`Sent everything to ${shortAddr(pendingSweep.to)}. "/history" has a receipt for each token.`, 'success'));
+    } catch (err) {
+      console.error('[vlora] sweep failed', err);
+      addMessage(agentMsg(describeWalletError(err), 'error'));
+    } finally {
+      setMoneyBusy(false);
+      setMoneyStep('');
+    }
+  }
+
   async function handleMoneyMessage(text: string): Promise<boolean> {
+    const sweep = parseSweep(text);
+    if (sweep) {
+      addMessage(userMsg(text));
+      if (!isConnected || !address) {
+        addMessage(agentMsg('Connect your wallet or sign in first.', 'info'));
+        return true;
+      }
+      const plan = planSweep(sweep.to as `0x${string}`);
+      if (!plan) {
+        addMessage(agentMsg('There is nothing to send — this wallet is empty.', 'info'));
+        return true;
+      }
+      setPendingSweep(plan);
+      addMessage(
+        agentMsg(
+          `That would send ${plan.lines.map((l) => `${l.amount} ${l.symbol}`).join(', ')} to ${sweep.to}, and it can't be undone. Check the address below and confirm.`,
+          'info',
+        ),
+      );
+      return true;
+    }
+
     const cashOut = parseCashOut(text);
     const bill = cashOut ? null : parseBill(text);
     if (!cashOut && !bill) return false;
@@ -1873,6 +1952,24 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
           className="fixed inset-0 z-30 bg-ink/20 backdrop-blur-[2px]"
         />
       )}
+
+      {/* Emptying a wallet gets its own confirmation, stricter than the rest */}
+      <AnimatePresence>
+        {pendingSweep && (
+          <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-2xl p-3 md:p-4">
+            <SweepConfirm
+              plan={pendingSweep}
+              onConfirm={() => void runSweep()}
+              onCancel={() => {
+                setPendingSweep(null);
+                addMessage(agentMsg('Cancelled — nothing was sent.', 'info'));
+              }}
+              busy={moneyBusy}
+              step={moneyStep}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Typed cash-outs and bills confirm here, like any other transaction */}
       <AnimatePresence>
