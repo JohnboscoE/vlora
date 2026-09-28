@@ -340,7 +340,9 @@ export function classify(product: BillProduct): string | null {
   // TV package from an electricity meter
   if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return 'exams';
   if (/dstv|gotv|startimes|showmax|decoder|\btv\b/.test(name)) return 'tv';
-  if (/electric|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
+  // "Kaduna Elec Prepaid Bill" is an electricity bill that never says
+  // "electricity", and it asks for a phone number, so only the name gives it away
+  if (/electric|\belec\b|prepaid bill|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
     return 'electricity';
   }
   if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';

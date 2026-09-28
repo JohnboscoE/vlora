@@ -248,7 +248,7 @@ function classify(product) {
   const name = product.name.toLowerCase();
   if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return "exams";
   if (/dstv|gotv|startimes|showmax|decoder|\btv\b/.test(name)) return "tv";
-  if (/electric|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
+  if (/electric|\belec\b|prepaid bill|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
     return "electricity";
   }
   if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return "data";
