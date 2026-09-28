@@ -24,12 +24,12 @@ const DEFAULT_MAX_USDC = 100;
  * What each tab in the app asks for. Bitrefill's categories are inconsistently
  * cased and overlapping, so each of ours maps to several of theirs.
  */
-const CATEGORIES: Record<string, string> = {
-  airtime: 'refill,Minutes,phone,Mobile',
-  data: 'data,Data,bundles',
-  electricity: 'Electricity,utility-bills,utility-bill,Utility',
-  tv: 'TV,dth,streaming',
-  bills: 'bills,bill,utility-bills,utility-bill,Utility,Electricity,TV,dth',
+const CATEGORIES: Record<string, true> = {
+  airtime: true,
+  data: true,
+  electricity: true,
+  tv: true,
+  exams: true,
 };
 
 function env(name: string): string {
@@ -108,8 +108,10 @@ export interface BillProduct {
   currency: string;
   image?: string;
   inStock: boolean;
-  /** What the product needs from the user: "phone_number", "meter_number", "none"… */
+  /** What the product needs from the user: "phone_number", "account", "none"… */
   recipientType: string;
+  /** Bitrefill's own type: phone_refill, bill_payment, gift_card, esim */
+  type: string;
   packages: { id: string; value: string; price?: number }[];
   range?: { min: number; max: number; step: number; priceRate?: number };
 }
@@ -129,6 +131,7 @@ function toProduct(raw: unknown): BillProduct | null {
     image: str(p?.image) || undefined,
     inStock: p?.in_stock !== false,
     recipientType: str(p?.recipient_type),
+    type: str(p?.type),
     packages: packages
       .map((pkg) => {
         const o = pkg as Record<string, unknown>;
@@ -321,21 +324,58 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
   return { id, payment: { address, price, currency: currency || 'USDC' } };
 }
 
-/** Products for a category and country, straight from Bitrefill (cached) */
-export async function billProducts(category: string, country: string): Promise<BillProduct[]> {
-  const categories = CATEGORIES[category];
-  if (!categories) throw new Error(`unknown category "${category}"`);
-  const key = `${country}:${categories}`;
+/**
+ * Which of our tabs a product belongs in.
+ *
+ * Bitrefill's own category strings are inconsistent — asking for "Electricity"
+ * or "TV" returned nothing for Nigeria while the products plainly exist — so the
+ * catalogue is fetched per country and sorted here, on the product's type and
+ * name, which are stable. Anything we can't place stays out rather than landing
+ * in the wrong tab.
+ */
+export function classify(product: BillProduct): string | null {
+  const name = product.name.toLowerCase();
+  if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return 'exams';
+  if (/dstv|gotv|startimes|showmax|tv\b|decoder/.test(name)) return 'tv';
+  if (/electric|ikeja|eko|ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|prepaid meter/.test(name)) {
+    return 'electricity';
+  }
+  if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';
+  if (product.type === 'phone_refill' || /airtime|top ?up|recharge/.test(name)) return 'airtime';
+  if (product.type === 'bill_payment') return 'utilities';
+  return null;
+}
+
+/** Every product Bitrefill lists for a country (cached; Bitrefill asks for that) */
+async function countryCatalogue(country: string): Promise<BillProduct[]> {
+  const key = `country:${country}`;
   const hit = catalogue.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return (hit.body as { products: BillProduct[] }).products;
-  const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(categories)}&limit=50`);
-  if (status !== 200) throw new Error(problemText(body, status));
-  const products = (Array.isArray(body.data) ? body.data : [])
-    .map(toProduct)
-    .filter((p): p is BillProduct => p != null && p.inStock)
-    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const products: BillProduct[] = [];
+  // Paginated, but bounded: a country's catalogue is a few hundred at most
+  for (let page = 0; page < 6; page++) {
+    const { status, body } = await bitrefill(`/products?country=${country}&limit=50&start=${page * 50}`);
+    if (status !== 200) {
+      if (page === 0) throw new Error(problemText(body, status));
+      break;
+    }
+    const batch = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p): p is BillProduct => p != null && p.inStock);
+    products.push(...batch);
+    if (batch.length < 50) break;
+  }
+  products.sort((a, b) => a.name.localeCompare(b.name));
   catalogue.set(key, { at: Date.now(), body: { products } });
   return products;
+}
+
+/** Products for one of our categories in a country */
+export async function billProducts(category: string, country: string): Promise<BillProduct[]> {
+  if (!CATEGORIES[category]) throw new Error(`unknown category "${category}"`);
+  const all = await countryCatalogue(country);
+  // "utilities" is the catch-all for a biller we can place no more precisely
+  const wanted = all.filter((p) => classify(p) === category || (category === 'electricity' && classify(p) === 'utilities'));
+  return wanted;
 }
 
 /** The networks that serve a phone number, so a top-up needn't ask which it is */

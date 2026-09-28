@@ -87,6 +87,7 @@ const KIND: Record<BillCategory, 'airtime' | 'utilities'> = {
   data: 'airtime',
   electricity: 'utilities',
   tv: 'utilities',
+  exams: 'utilities',
 };
 
 export async function runBillPayment(address: Address, plan: ResolvedBill, onStep: StepReport = () => {}): Promise<BillRun> {

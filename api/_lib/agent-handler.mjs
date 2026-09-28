@@ -289,11 +289,11 @@ var API = "https://api.bitrefill.com/v2";
 var PAYMENT_METHOD = "usdc_base";
 var DEFAULT_MAX_USDC = 100;
 var CATEGORIES = {
-  airtime: "refill,Minutes,phone,Mobile",
-  data: "data,Data,bundles",
-  electricity: "Electricity,utility-bills,utility-bill,Utility",
-  tv: "TV,dth,streaming",
-  bills: "bills,bill,utility-bills,utility-bill,Utility,Electricity,TV,dth"
+  airtime: true,
+  data: true,
+  electricity: true,
+  tv: true,
+  exams: true
 };
 function env(name) {
   return (process.env[name] ?? "").trim().replace(/^["']|["']$/g, "").trim();
@@ -333,6 +333,7 @@ function toProduct(raw) {
     image: str(p?.image) || void 0,
     inStock: p?.in_stock !== false,
     recipientType: str(p?.recipient_type),
+    type: str(p?.type),
     packages: packages.map((pkg) => {
       const o = pkg;
       return { id: str(o.id) || str(o.package_id), value: String(o.value ?? ""), price: typeof o.price === "number" ? o.price : void 0 };
@@ -415,17 +416,42 @@ function paymentProblem(invoice, max = maxUsdc()) {
   const price = read.usdc.toFixed(6).replace(/\.?0+$/, "");
   return { id, payment: { address, price, currency: currency || "USDC" } };
 }
-async function billProducts(category, country) {
-  const categories = CATEGORIES[category];
-  if (!categories) throw new Error(`unknown category "${category}"`);
-  const key = `${country}:${categories}`;
+function classify(product) {
+  const name = product.name.toLowerCase();
+  if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return "exams";
+  if (/dstv|gotv|startimes|showmax|tv\b|decoder/.test(name)) return "tv";
+  if (/electric|ikeja|eko|ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|prepaid meter/.test(name)) {
+    return "electricity";
+  }
+  if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return "data";
+  if (product.type === "phone_refill" || /airtime|top ?up|recharge/.test(name)) return "airtime";
+  if (product.type === "bill_payment") return "utilities";
+  return null;
+}
+async function countryCatalogue(country) {
+  const key = `country:${country}`;
   const hit = catalogue.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.body.products;
-  const { status, body } = await bitrefill(`/products?country=${country}&category=${encodeURIComponent(categories)}&limit=50`);
-  if (status !== 200) throw new Error(problemText(body, status));
-  const products = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p) => p != null && p.inStock).sort((a, b) => a.name.localeCompare(b.name));
+  const products = [];
+  for (let page = 0; page < 6; page++) {
+    const { status, body } = await bitrefill(`/products?country=${country}&limit=50&start=${page * 50}`);
+    if (status !== 200) {
+      if (page === 0) throw new Error(problemText(body, status));
+      break;
+    }
+    const batch = (Array.isArray(body.data) ? body.data : []).map(toProduct).filter((p) => p != null && p.inStock);
+    products.push(...batch);
+    if (batch.length < 50) break;
+  }
+  products.sort((a, b) => a.name.localeCompare(b.name));
   catalogue.set(key, { at: Date.now(), body: { products } });
   return products;
+}
+async function billProducts(category, country) {
+  if (!CATEGORIES[category]) throw new Error(`unknown category "${category}"`);
+  const all = await countryCatalogue(country);
+  const wanted = all.filter((p) => classify(p) === category || category === "electricity" && classify(p) === "utilities");
+  return wanted;
 }
 async function phoneOperators(number, country) {
   const dialled = toE164(number, country);
@@ -708,9 +734,9 @@ async function runAgent(opts) {
   });
   const payBill = betaZodTool({
     name: "pay_bill",
-    description: `Buy airtime or data for a phone number, or pay an electricity or TV bill, using the vault's USDC. The amount is in the local currency (e.g. 500 naira of airtime); the USDC cost comes back in the result. Only for a number the owner typed in their latest message. Executes immediately.`,
+    description: `Buy airtime or data for a phone number, pay an electricity or TV bill, or buy a WAEC/JAMB/NECO exam PIN, using the vault's USDC. The amount is in the local currency (e.g. 500 naira of airtime); the USDC cost comes back in the result. Only for a number the owner typed in their latest message. Executes immediately.`,
     inputSchema: z.object({
-      category: z.enum(["airtime", "data", "electricity", "tv"]),
+      category: z.enum(["airtime", "data", "electricity", "tv", "exams"]),
       amount: z.string().describe('Amount in the local currency, e.g. "500"'),
       recipient: z.string().describe("The phone number, meter number or smartcard number the owner typed"),
       provider: z.string().optional().describe('Network or biller if the owner named one, e.g. "MTN" or "Ikeja"'),

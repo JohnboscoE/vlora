@@ -276,11 +276,11 @@ export async function runAgent(opts: {
   const payBill = betaZodTool({
     name: 'pay_bill',
     description:
-      `Buy airtime or data for a phone number, or pay an electricity or TV bill, using the vault's USDC. ` +
+      `Buy airtime or data for a phone number, pay an electricity or TV bill, or buy a WAEC/JAMB/NECO exam PIN, using the vault's USDC. ` +
       `The amount is in the local currency (e.g. 500 naira of airtime); the USDC cost comes back in the result. ` +
       `Only for a number the owner typed in their latest message. Executes immediately.`,
     inputSchema: z.object({
-      category: z.enum(['airtime', 'data', 'electricity', 'tv']),
+      category: z.enum(['airtime', 'data', 'electricity', 'tv', 'exams']),
       amount: z.string().describe('Amount in the local currency, e.g. "500"'),
       recipient: z.string().describe('The phone number, meter number or smartcard number the owner typed'),
       provider: z.string().optional().describe('Network or biller if the owner named one, e.g. "MTN" or "Ikeja"'),

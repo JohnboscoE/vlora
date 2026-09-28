@@ -7,13 +7,14 @@
  * invoice price to its address, signing once on Arc (src/lib/bridge.ts).
  */
 
-export type BillCategory = 'airtime' | 'data' | 'electricity' | 'tv';
+export type BillCategory = 'airtime' | 'data' | 'electricity' | 'tv' | 'exams';
 
 export const BILL_CATEGORY_LABELS: Record<BillCategory, string> = {
   airtime: 'Airtime',
   data: 'Data',
   electricity: 'Electricity',
   tv: 'TV',
+  exams: 'Exam PINs',
 };
 
 export interface BillsInfo {
@@ -136,5 +137,6 @@ export function recipientLabel(product: BillProduct | null, category: BillCatego
   if (type.includes('email')) return 'Email address';
   if (category === 'electricity') return 'Meter number';
   if (category === 'tv') return 'Smartcard or IUC number';
+  if (category === 'exams') return 'Phone number for the PIN';
   return 'Account number';
 }

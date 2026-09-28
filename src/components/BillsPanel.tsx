@@ -32,7 +32,7 @@ interface BillsPanelProps {
   category?: BillCategory;
 }
 
-const CATEGORIES: BillCategory[] = ['airtime', 'data', 'electricity', 'tv'];
+const CATEGORIES: BillCategory[] = ['airtime', 'data', 'electricity', 'tv', 'exams'];
 /** Countries Bitrefill covers that Vlora's users are most likely to want */
 const COUNTRIES = [
   { code: 'NG', name: 'Nigeria' },
