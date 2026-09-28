@@ -335,16 +335,21 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
  */
 export function classify(product: BillProduct): string | null {
   const name = product.name.toLowerCase();
+  // Name first, because it is the only thing that separates a data bundle from
+  // airtime or a TV package from an electricity meter
   if (/waec|jamb|neco|nabteb|exam|scratch card|result checker/.test(name)) return 'exams';
-  if (/dstv|gotv|startimes|showmax|tv\b|decoder/.test(name)) return 'tv';
-  if (/electric|ikeja|eko|ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|prepaid meter/.test(name)) {
+  if (/dstv|gotv|startimes|showmax|decoder|tv/.test(name)) return 'tv';
+  if (/electric|ikeja|eko |ekedc|aedc|phed|kedco|ibedc|bedc|eedc|kaedco|jos |yola|aba power|disco|meter/.test(name)) {
     return 'electricity';
   }
-  if (/\bdata\b|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';
-  if (product.type === 'phone_refill' || /airtime|top ?up|recharge/.test(name)) return 'airtime';
-  if (product.type === 'bill_payment') return 'utilities';
+  if (/data|bundle|internet|broadband|spectranet|smile/.test(name)) return 'data';
+  // Then what the product asks for. Bitrefill sends no `type`, but it always
+  // says whether it needs a phone line or an account number.
+  if (product.recipientType === 'phone_number') return 'airtime';
+  if (product.recipientType === 'account') return 'utilities';
   return null;
 }
+
 
 /** Every product Bitrefill lists for a country (cached; Bitrefill asks for that) */
 async function countryCatalogue(country: string): Promise<BillProduct[]> {
