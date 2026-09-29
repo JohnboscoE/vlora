@@ -34,6 +34,10 @@ export function SavingsPanel() {
   const [due, setDue] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // Removing a target that still holds money asks first: the money stays in the
+  // vault either way, and someone deleting a row does not expect to go hunting
+  // for it in Earn afterwards
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -166,14 +170,49 @@ export function SavingsPanel() {
                     </p>
                   </div>
                   <button
-                    onClick={() => removeGoal(address, goal.id)}
+                    onClick={() => (goal.saved > 0 ? setConfirmRemove(goal.id) : removeGoal(address, goal.id))}
                     aria-label={`Remove ${goal.name}`}
-                    title="Removes the target, not the money"
                     className="rounded-lg p-1.5 text-subtle hover:text-danger"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
+
+                {confirmRemove === goal.id && (
+                  <div className="mt-2 rounded-xl border border-danger/30 bg-danger/5 p-2.5">
+                    <p className="text-[11px] leading-relaxed text-ink">
+                      This target still holds {usdc(goal.saved)} USDC. The money is in the Earn vault and stays there — removing the
+                      target only removes the label, and you would take the money out from Earn instead.
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                      <button
+                        onClick={() => {
+                          setAmounts((prev) => ({ ...prev, [goal.id]: String(goal.saved) }));
+                          setConfirmRemove(null);
+                          void move(goal, 'out');
+                        }}
+                        className="rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-ink"
+                      >
+                        Take it out
+                      </button>
+                      <button
+                        onClick={() => {
+                          removeGoal(address, goal.id);
+                          setConfirmRemove(null);
+                        }}
+                        className="rounded-lg border border-danger/30 px-2 py-1.5 text-[11px] font-semibold text-danger"
+                      >
+                        Remove anyway
+                      </button>
+                      <button
+                        onClick={() => setConfirmRemove(null)}
+                        className="rounded-lg border border-line/15 px-2 py-1.5 text-[11px] font-semibold text-ink"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* A meter, not a chart: one ratio against one limit */}
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
@@ -214,8 +253,8 @@ export function SavingsPanel() {
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-subtle">
-        Targets are kept in this browser; the money is in the vault on {ACTIVE_CHAIN.name}. Removing a target leaves the money where it is —
-        take it out first if that is what you meant.
+        Targets are kept in this browser; the money is in the vault on {ACTIVE_CHAIN.name}. Removing a target never moves money — if a
+        target disappears with a balance, the USDC is still yours in Earn, where you can withdraw it.
       </p>
     </section>
   );
