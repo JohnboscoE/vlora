@@ -15,7 +15,7 @@
 import { isAddress } from 'viem';
 import { CHAIN_ID } from './chain';
 
-export type OfframpRoute = 'info' | 'institutions' | 'rate' | 'verify' | 'orders' | 'order';
+export type OfframpRoute = 'info' | 'institutions' | 'rate' | 'verify' | 'orders' | 'order' | 'deposits';
 
 const API = 'https://api.paycrest.io/v2';
 /** Paycrest's settlement network for our orders */
@@ -51,7 +51,7 @@ function configProblem(): string | null {
 // and they can't check a wallet signature, so keep the blast radius small.
 const recent = new Map<string, number[]>();
 const RATE_WINDOW_MS = 60_000;
-const RATE_MAX: Record<string, number> = { verify: 30, orders: 10, rate: 120, institutions: 60, order: 120 };
+const RATE_MAX: Record<string, number> = { verify: 30, orders: 10, deposits: 10, rate: 120, institutions: 60, order: 120 };
 
 function rateLimited(route: string): boolean {
   const now = Date.now();
@@ -208,6 +208,59 @@ export async function handleOfframp(route: OfframpRoute, request: Request): Prom
     if (status !== 200) return json(400, { error: problemText(body) });
     // `data` is the account name, or "OK" where the corridor can't look one up
     return json(200, { accountName: str(body.data) });
+  }
+
+  if (route === 'deposits') {
+    // Fiat in, stablecoin out: Paycrest gives a virtual bank account to pay into
+    // and releases USDC to the address we name. It settles on Base, not Arc,
+    // because Paycrest has no Arc — the app says so and moves it afterwards.
+    if (request.method !== 'POST') return json(405, { error: 'method not allowed' });
+    if (problem) {
+      console.error(`[offramp] not configured: ${problem}`);
+      return json(503, { error: 'Bank deposits are not configured on this server.' });
+    }
+    const payload = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    const amount = str(payload?.amount).trim();
+    const currency = str(payload?.currency).toUpperCase();
+    const recipient = str(payload?.recipient).trim();
+    const institution = str(payload?.institution).toUpperCase();
+    const accountIdentifier = str(payload?.accountIdentifier).trim();
+    const accountName = str(payload?.accountName).trim();
+
+    if (!/^\d{2,9}(\.\d{1,2})?$/.test(amount)) return json(400, { error: 'Enter how much you want to pay in.' });
+    if (!CURRENCY.test(currency)) return json(400, { error: 'Pick a currency.' });
+    // Where the USDC lands: the user's own address, on Paycrest's settlement network
+    if (!isAddress(recipient)) return json(400, { error: 'A wallet address is required.' });
+    // Refunds go back to a bank account, so Paycrest needs one up front
+    if (!INSTITUTION.test(institution)) return json(400, { error: 'Pick the bank you are paying from.' });
+    if (!ACCOUNT.test(accountIdentifier)) return json(400, { error: 'That account number looks wrong.' });
+    if (accountName.length < 2 || accountName.length > 100) return json(400, { error: 'Account name is missing.' });
+
+    const { status, body } = await paycrest('/sender/orders', {
+      method: 'POST',
+      authenticated: true,
+      body: JSON.stringify({
+        amount,
+        amountIn: 'fiat',
+        source: { type: 'fiat', currency, refundAccount: { institution, accountIdentifier, accountName } },
+        destination: { type: 'crypto', currency: TOKEN, recipient: { address: recipient, network: NETWORK } },
+      }),
+    });
+    if (status !== 201 && status !== 200) {
+      console.error('[offramp] deposit failed', status, body.message);
+      if (status === 401 || status === 403) {
+        return json(503, {
+          error: `Paycrest won't take orders from this account yet (${problemText(body)}). That's their verification, not your wallet \u2014 nothing was sent.`,
+        });
+      }
+      return json(400, { error: problemText(body) });
+    }
+    const order = body.data as { id?: string; providerAccount?: Record<string, unknown> } | undefined;
+    if (!order?.id || !order.providerAccount) {
+      console.error('[offramp] unexpected deposit order', JSON.stringify(body).slice(0, 300));
+      return json(502, { error: 'Paycrest returned an order we could not read. Nothing was paid.' });
+    }
+    return json(201, { order });
   }
 
   if (route === 'order') {

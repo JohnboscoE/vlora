@@ -2,7 +2,7 @@
 // deployment can only carry so many; logic lives in server/offramp.ts (bundled to api/_lib).
 import { handleOfframp } from '../_lib/offramp-handler.mjs';
 
-const ROUTES = new Set(['info', 'institutions', 'rate', 'verify', 'orders', 'order']);
+const ROUTES = new Set(['info', 'institutions', 'rate', 'verify', 'orders', 'order', 'deposits']);
 
 export default {
   fetch(request) {

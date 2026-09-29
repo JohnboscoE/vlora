@@ -13,7 +13,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const ROUTES = new Set<AgentRoute>(['info', 'nonce', 'login', 'chat']);
 const GASLESS_ROUTES = new Set<GaslessRoute>(['info', 'settle', 'check']);
 const ONRAMP_ROUTES = new Set<OnrampRoute>(['info', 'sessions']);
-const OFFRAMP_ROUTES = new Set<OfframpRoute>(['info', 'institutions', 'rate', 'verify', 'orders', 'order']);
+const OFFRAMP_ROUTES = new Set<OfframpRoute>(['info', 'institutions', 'rate', 'verify', 'orders', 'order', 'deposits']);
 const BILLS_ROUTES = new Set<BillsRoute>(['info', 'products', 'product', 'invoices', 'invoice', 'phone', 'preflight']);
 
 async function toRequest(req: IncomingMessage): Promise<Request> {

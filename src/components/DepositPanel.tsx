@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { ArrowDownToLine, Check, ChevronDown, Copy, CreditCard, Loader2, X } from 'lucide-react';
 import { ACTIVE_CHAIN, ACTIVE_CHAIN_ID } from '@/chain-env';
 import { getTokens } from '@/tokens';
+import { BankDeposit } from '@/components/BankDeposit';
 import { cn } from '@/lib/utils';
 
 interface OnrampInfo {
@@ -195,6 +196,14 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 for {ACTIVE_CHAIN.name}. Until then, send {tokens[0]} to the address above from an exchange or another wallet.
               </p>
             )}
+            <div className="mt-4 border-t border-line/10 pt-4">
+              <h3 className="text-xs font-semibold text-ink">Bank transfer</h3>
+              <p className="mb-2 mt-0.5 text-[11px] leading-relaxed text-muted">
+                Pay from your own bank in naira, Kenyan, Ugandan or Tanzanian shillings — no card needed.
+              </p>
+              <BankDeposit />
+            </div>
+
             {/* Arc's hosted widget. It needs an explicit height or the iframe collapses. */}
             {widgetUrl && (
               <iframe

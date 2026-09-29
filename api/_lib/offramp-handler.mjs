@@ -89,7 +89,7 @@ function configProblem() {
 }
 var recent = /* @__PURE__ */ new Map();
 var RATE_WINDOW_MS = 6e4;
-var RATE_MAX = { verify: 30, orders: 10, rate: 120, institutions: 60, order: 120 };
+var RATE_MAX = { verify: 30, orders: 10, deposits: 10, rate: 120, institutions: 60, order: 120 };
 function rateLimited(route) {
   const now = Date.now();
   const hits = (recent.get(route) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -196,6 +196,51 @@ async function handleOfframp(route, request) {
     });
     if (status2 !== 200) return json(400, { error: problemText(body2) });
     return json(200, { accountName: str(body2.data) });
+  }
+  if (route === "deposits") {
+    if (request.method !== "POST") return json(405, { error: "method not allowed" });
+    if (problem) {
+      console.error(`[offramp] not configured: ${problem}`);
+      return json(503, { error: "Bank deposits are not configured on this server." });
+    }
+    const payload2 = await request.json().catch(() => null);
+    const amount2 = str(payload2?.amount).trim();
+    const currency2 = str(payload2?.currency).toUpperCase();
+    const recipient = str(payload2?.recipient).trim();
+    const institution2 = str(payload2?.institution).toUpperCase();
+    const accountIdentifier2 = str(payload2?.accountIdentifier).trim();
+    const accountName2 = str(payload2?.accountName).trim();
+    if (!/^\d{2,9}(\.\d{1,2})?$/.test(amount2)) return json(400, { error: "Enter how much you want to pay in." });
+    if (!CURRENCY.test(currency2)) return json(400, { error: "Pick a currency." });
+    if (!isAddress(recipient)) return json(400, { error: "A wallet address is required." });
+    if (!INSTITUTION.test(institution2)) return json(400, { error: "Pick the bank you are paying from." });
+    if (!ACCOUNT.test(accountIdentifier2)) return json(400, { error: "That account number looks wrong." });
+    if (accountName2.length < 2 || accountName2.length > 100) return json(400, { error: "Account name is missing." });
+    const { status: status2, body: body2 } = await paycrest("/sender/orders", {
+      method: "POST",
+      authenticated: true,
+      body: JSON.stringify({
+        amount: amount2,
+        amountIn: "fiat",
+        source: { type: "fiat", currency: currency2, refundAccount: { institution: institution2, accountIdentifier: accountIdentifier2, accountName: accountName2 } },
+        destination: { type: "crypto", currency: TOKEN, recipient: { address: recipient, network: NETWORK } }
+      })
+    });
+    if (status2 !== 201 && status2 !== 200) {
+      console.error("[offramp] deposit failed", status2, body2.message);
+      if (status2 === 401 || status2 === 403) {
+        return json(503, {
+          error: `Paycrest won't take orders from this account yet (${problemText(body2)}). That's their verification, not your wallet \u2014 nothing was sent.`
+        });
+      }
+      return json(400, { error: problemText(body2) });
+    }
+    const order = body2.data;
+    if (!order?.id || !order.providerAccount) {
+      console.error("[offramp] unexpected deposit order", JSON.stringify(body2).slice(0, 300));
+      return json(502, { error: "Paycrest returned an order we could not read. Nothing was paid." });
+    }
+    return json(201, { order });
   }
   if (route === "order") {
     if (problem) return json(503, { error: problem });
