@@ -26,13 +26,14 @@ import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
 import { TabStrip, type TabItem } from './components/TabStrip';
 import { ComingSoon } from './components/ComingSoon';
 import { InsightsPanel } from './components/InsightsPanel';
+import { SavingsPanel } from './components/SavingsPanel';
 import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
 import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
 import { watchPendingActivity } from './lib/watchPending';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt, MessageSquare, Clock3, TrendingUp } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt, MessageSquare, Clock3, TrendingUp, Target } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -120,6 +121,7 @@ const CHAT_REPLIES = {
     '• Check your balance — "what\'s my balance?"\n' +
     '• Add funds — "/deposit" shows your address, a QR code, and card top-ups where available\n' +
     '• Earn on idle USDC — "/earn" deposits into a lending vault on Arc; withdraw any time\n' +
+    '• Save toward something — "/save" sets a target and fills it from the same vault\n' +
     '• Cash out to a bank — "cash out 20 USDC to gtbank 0123456789" (or "/cashout" to browse)\n' +
     '• Move everything — "send everything to 0x…" empties this wallet, after you confirm the address by hand\n' +
     '• Airtime, data and bills — "buy 500 airtime for 08012345678", "pay 5000 electricity for meter 04123456789"\n' +
@@ -302,6 +304,7 @@ export default function App() {
     { id: 'bills', label: 'Airtime & bills', icon: Receipt },
     { id: 'cashout', label: 'Cash out', icon: Banknote },
     { id: 'earn', label: 'Earn', icon: PiggyBank },
+    { id: 'savings', label: 'Targets', icon: Target },
     { id: 'deposit', label: 'Add funds', icon: ArrowDownToLine },
     { id: 'activity', label: 'Activity', icon: TrendingUp },
     { id: 'history', label: 'History', icon: History },
@@ -1117,7 +1120,20 @@ export default function App() {
   // /agent and /exit switch modes; they are handled here, never sent to the agent
   function handleModeCommand(command: string): boolean {
     const cmd = command.trim().toLowerCase();
-    if (['/earn', '/invest', '/investments', '/yield', '/save'].includes(cmd)) {
+    if (['/save', '/savings', '/target', '/targets', '/goal', '/goals'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setTab('savings');
+      addMessage(
+        agentMsg(
+          isConnected
+            ? 'Targets are open. Name what you are saving for and how much — the money sits in the same Arc vault as Earn, so it earns while it waits, and nothing is locked.'
+            : 'Connect your wallet or sign in first, then open Targets again.',
+          'info',
+        ),
+      );
+      return true;
+    }
+    if (['/earn', '/invest', '/investments', '/yield'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setTab('earn');
       addMessage(
@@ -1861,6 +1877,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   {tab === 'bills' && <BillsPanel category={billsCategory} />}
                   {tab === 'cashout' && <OfframpPanel />}
                   {tab === 'earn' && <EarnPanel />}
+                  {tab === 'savings' && <SavingsPanel />}
                   {tab === 'deposit' && <DepositPanel />}
                   {tab === 'activity' && <InsightsPanel />}
                   {tab === 'history' && <HistoryPanel />}
