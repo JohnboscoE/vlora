@@ -217,7 +217,7 @@ export interface EarnIntent {
  * wrong way. A deposit is safer to infer: "save 20 in earn" can only mean one
  * thing.
  */
-export function parseEarn(input: string): EarnIntent | null {
+export function parseEarn(input: string, onEarnTab = false): EarnIntent | null {
   const text = input.trim();
   if (/\b(how|what|can i|does|should|is it)\b/i.test(text) && !/\b(withdraw|deposit|put|take)\b/i.test(text)) return null;
 
@@ -227,7 +227,9 @@ export function parseEarn(input: string): EarnIntent | null {
   const takesOut = /\b(withdraw|cash in|redeem|pull out)\b/i.test(text) || /\btake\b.{0,40}?\bout\b/i.test(text);
   const putsIn = /\b(deposit|put|add|move|save|stake|lend)\b/i.test(text);
 
-  if (!mentionsEarn) return null;
+  // On the Earn tab the context supplies what the words leave out: "deposit 1
+  // USDC" there can only mean one thing
+  if (!mentionsEarn && !onEarnTab) return null;
   if (!takesOut && !putsIn) return null;
 
   const everything = /\b(all|everything|the lot|max)\b/i.test(text);
@@ -240,5 +242,101 @@ export function parseEarn(input: string): EarnIntent | null {
     // is not a sentence anyone means as a deposit
     action: takesOut ? 'withdraw' : 'deposit',
     amount: everything ? 'all' : (amount?.[1] ?? '').replace(/,/g, ''),
+  };
+}
+
+/** A date written the way people write one: "30th October", "30 Oct", "2026-10-30" */
+export function parseWhen(text: string, now = new Date()): number | null {
+  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) {
+    const at = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00`).getTime();
+    return Number.isFinite(at) ? at : null;
+  }
+
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  // "30th October", "30 oct", "october 30"
+  const dayFirst = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b/i);
+  const monthFirst = text.match(/\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+  const found = dayFirst
+    ? { day: Number(dayFirst[1]), month: (dayFirst[2] ?? '').toLowerCase() }
+    : monthFirst
+      ? { day: Number(monthFirst[2]), month: (monthFirst[1] ?? '').toLowerCase() }
+      : null;
+  if (!found) return null;
+
+  const month = months.findIndex((m) => found.month.startsWith(m));
+  if (month < 0 || found.day < 1 || found.day > 31) return null;
+
+  // A date already gone means next year: "30 October" said in November is 2027
+  let year = now.getFullYear();
+  const at = new Date(year, month, found.day, 12, 0, 0);
+  if (at.getTime() < now.getTime()) {
+    year += 1;
+    at.setFullYear(year);
+  }
+  return at.getTime();
+}
+
+export interface SavingsGoalIntent {
+  type: 'savings_goal';
+  name: string;
+  amount: string;
+  due: number | null;
+}
+
+/**
+ * "create target for rent, total is 1 USDC, due 30th October".
+ *
+ * The name is whatever sits between "for" and the amount, which is how people
+ * write it. A target with no amount is not a target, so that is required.
+ */
+export function parseSavingsGoal(input: string): SavingsGoalIntent | null {
+  const text = input.trim();
+  if (!/\b(target|goal|saving|save)\b/i.test(text)) return null;
+  if (!/\b(create|new|add|set|start|make|save)\b/i.test(text)) return null;
+  // "add 5 to rent" is a contribution, not a new target
+  if (/\badd\b[^.]*\bto\b/i.test(text) && !/\b(target|goal)\b/i.test(text.split(/\bto\b/i)[0] ?? '')) return null;
+
+  const amountMatch = text.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:usdc|usd|\$)?/i);
+  if (!amountMatch) return null;
+  const amount = (amountMatch[1] ?? '').replace(/,/g, '');
+  if (Number(amount) <= 0) return null;
+
+  // The name: after "for", up to the amount or a "total"/"due"/date word
+  const forMatch = text.match(/\bfor\s+([a-z0-9][a-z0-9 '&-]{0,39}?)(?=\s*(?:,|\.|total|amount|is|of|worth|due|by|on|before|\d|$))/i);
+  const name = forMatch?.[1]?.trim();
+  if (!name) return null;
+
+  return { type: 'savings_goal', name, amount, due: parseWhen(text) };
+}
+
+export interface SavingsMoveIntent {
+  type: 'savings_move';
+  action: 'add' | 'take';
+  amount: string;
+  /** What the person called the target; matched against real ones by the app */
+  goal: string;
+}
+
+/** "add 0.5 to rent", "take 1 out of school fees", "put 2 into rent" */
+export function parseSavingsMove(input: string): SavingsMoveIntent | null {
+  const text = input.trim();
+  const takes = /\b(take|withdraw|remove|pull)\b/i.test(text);
+  const adds = /\b(add|put|save|top ?up|contribute)\b/i.test(text);
+  if (!takes && !adds) return null;
+
+  const amountMatch = text.match(/(\d[\d,]*(?:\.\d+)?)/);
+  if (!amountMatch) return null;
+
+  // The target's name follows "to", "into", "toward" or "out of"
+  const named = text.match(/\b(?:out of|from|to|into|towards?|for)\s+([a-z0-9][a-z0-9 '&-]{0,39}?)\s*$/i);
+  const goal = named?.[1]?.trim();
+  if (!goal) return null;
+
+  return {
+    type: 'savings_move',
+    action: takes ? 'take' : 'add',
+    amount: (amountMatch[1] ?? '').replace(/,/g, ''),
+    goal,
   };
 }

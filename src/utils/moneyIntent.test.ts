@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBill, parseCashOut, parseEarn, parseSweep } from './moneyIntent';
+import { parseBill, parseCashOut, parseEarn, parseSavingsGoal, parseSavingsMove, parseSweep, parseWhen } from './moneyIntent';
 
 // These decide what a typed message means before any money is quoted, so the
 // cases that matter are the ones where a wrong reading would cost someone: an
@@ -172,5 +172,79 @@ describe('parseEarn — the Earn tab, typed', () => {
   it('needs an amount', () => {
     expect(parseEarn('withdraw from earn')).toBeNull();
     expect(parseEarn('put money in earn')).toBeNull();
+  });
+});
+
+describe('the Earn tab supplies its own context', () => {
+  it('reads a bare deposit or withdrawal when you are already on Earn', () => {
+    expect(parseEarn('Deposit 1 usdc', true)).toEqual({ type: 'earn', action: 'deposit', amount: '1' });
+    expect(parseEarn('Withdraw 1 USDC', true)).toEqual({ type: 'earn', action: 'withdraw', amount: '1' });
+    expect(parseEarn('withdraw all', true)).toMatchObject({ action: 'withdraw', amount: 'all' });
+  });
+
+  it('still refuses a bare withdrawal anywhere else', () => {
+    expect(parseEarn('Withdraw 1 USDC', false)).toBeNull();
+  });
+});
+
+describe('parseWhen', () => {
+  const now = new Date('2026-09-29T12:00:00');
+
+  it('reads the ways people write a date', () => {
+    expect(new Date(parseWhen('due 30th October', now)!).getMonth()).toBe(9);
+    expect(new Date(parseWhen('by 30 Oct', now)!).getDate()).toBe(30);
+    expect(new Date(parseWhen('on October 30', now)!).getDate()).toBe(30);
+    expect(new Date(parseWhen('2026-10-30', now)!).getDate()).toBe(30);
+  });
+
+  it('rolls a date that has already gone into next year', () => {
+    expect(new Date(parseWhen('1st March', now)!).getFullYear()).toBe(2027);
+    expect(new Date(parseWhen('30th October', now)!).getFullYear()).toBe(2026);
+  });
+
+  it('has no opinion without a date', () => {
+    expect(parseWhen('sometime soon', now)).toBeNull();
+    expect(parseWhen('the 45th of Smarch', now)).toBeNull();
+  });
+});
+
+describe('parseSavingsGoal', () => {
+  it('reads the sentence people actually type', () => {
+    expect(parseSavingsGoal('Create target for rent total is 1 USDC and date is 30th October')).toMatchObject({
+      type: 'savings_goal',
+      name: 'rent',
+      amount: '1',
+    });
+  });
+
+  it('works without a date', () => {
+    const goal = parseSavingsGoal('new target for school fees 250 USDC');
+    expect(goal).toMatchObject({ name: 'school fees', amount: '250' });
+    expect(goal?.due).toBeNull();
+  });
+
+  it('needs an amount and a name', () => {
+    expect(parseSavingsGoal('create a target')).toBeNull();
+    expect(parseSavingsGoal('save 100 USDC')).toBeNull();
+  });
+
+  it('leaves other commands alone', () => {
+    expect(parseSavingsGoal('buy 500 airtime for 08012345678')).toBeNull();
+  });
+});
+
+describe('parseSavingsMove', () => {
+  it('reads money going into a target', () => {
+    expect(parseSavingsMove('add 0.5 to rent')).toEqual({ type: 'savings_move', action: 'add', amount: '0.5', goal: 'rent' });
+    expect(parseSavingsMove('put 2 into school fees')).toMatchObject({ action: 'add', goal: 'school fees' });
+  });
+
+  it('reads money coming out', () => {
+    expect(parseSavingsMove('take 1 out of rent')).toEqual({ type: 'savings_move', action: 'take', amount: '1', goal: 'rent' });
+  });
+
+  it('needs an amount and a target', () => {
+    expect(parseSavingsMove('add to rent')).toBeNull();
+    expect(parseSavingsMove('add 5')).toBeNull();
   });
 });

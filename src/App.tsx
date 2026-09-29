@@ -21,8 +21,9 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { BillsPanel } from './components/BillsPanel';
 import type { BillCategory } from './lib/bills';
 import { MoneyConfirm, type MoneyPlan } from './components/MoneyConfirm';
-import { parseBill, parseCashOut, parseEarn, parseSweep } from './utils/moneyIntent';
+import { parseBill, parseCashOut, parseEarn, parseSavingsGoal, parseSavingsMove, parseSweep } from './utils/moneyIntent';
 import { depositToVault, exploreVaults, getPosition, withdrawFromVault } from './lib/earn';
+import { addGoal, adjustGoal, goalProblem, loadGoals } from './lib/savings';
 import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
 import { TabStrip, type TabItem } from './components/TabStrip';
 import { ComingSoon } from './components/ComingSoon';
@@ -1384,7 +1385,87 @@ export default function App() {
       return true;
     }
 
-    const earn = parseEarn(text);
+    const newGoal = parseSavingsGoal(text);
+    if (newGoal) {
+      addMessage(userMsg(text));
+      if (!isConnected || !address) {
+        addMessage(agentMsg('Connect your wallet or sign in first.', 'info'));
+        return true;
+      }
+      const problem = goalProblem(newGoal.name, newGoal.amount, loadGoals(address));
+      if (problem) {
+        addMessage(agentMsg(problem, 'error'));
+        return true;
+      }
+      addGoal(address, newGoal.name, Number(newGoal.amount), newGoal.due ?? undefined);
+      setTab('savings');
+      addMessage(
+        agentMsg(
+          `Target set: ${newGoal.name}, ${newGoal.amount} USDC${
+            newGoal.due ? ` by ${new Date(newGoal.due).toLocaleDateString()}` : ''
+          }. Add to it whenever you like — say "add 1 to ${newGoal.name}" or use the panel.`,
+          'success',
+        ),
+      );
+      return true;
+    }
+
+    // Moving money in or out of a target the person named
+    const goalMove = address ? parseSavingsMove(text) : null;
+    const namedGoal = goalMove
+      ? loadGoals(address).find((g) => g.name.toLowerCase() === goalMove.goal.toLowerCase().trim())
+      : undefined;
+    if (goalMove && namedGoal && address) {
+      addMessage(userMsg(text));
+      thinkingRef.current = true;
+      setIsThinking(true);
+      try {
+        const vaults = await exploreVaults();
+        const vault = vaults[0];
+        if (!vault) throw new Error(`No savings vault is available on ${ACTIVE_CHAIN.name} right now.`);
+        if (goalMove.action === 'take' && Number(goalMove.amount) > namedGoal.saved) {
+          throw new Error(`"${namedGoal.name}" only has ${namedGoal.saved} USDC in it.`);
+        }
+        setMoneyBusy(true);
+        setMoneyStep(
+          goalMove.action === 'add' ? `Adding ${goalMove.amount} USDC to ${namedGoal.name}\u2026` : `Taking ${goalMove.amount} USDC out of ${namedGoal.name}\u2026`,
+        );
+        if (goalMove.action === 'add') await depositToVault(vault.address, goalMove.amount);
+        else await withdrawFromVault(vault.address, goalMove.amount);
+        adjustGoal(address, namedGoal.id, goalMove.action === 'add' ? Number(goalMove.amount) : -Number(goalMove.amount));
+        recordActivity(address, {
+          kind: 'earn',
+          status: 'success',
+          title:
+            goalMove.action === 'add'
+              ? `Saved ${goalMove.amount} USDC toward ${namedGoal.name}`
+              : `Took ${goalMove.amount} USDC out of ${namedGoal.name}`,
+          amount: goalMove.amount,
+          token: 'USDC',
+          detail: `${namedGoal.name} · ${vault.name}`,
+        });
+        addMessage(
+          agentMsg(
+            goalMove.action === 'add'
+              ? `Added ${goalMove.amount} USDC to ${namedGoal.name}. It earns in ${vault.name} while it waits.`
+              : `Took ${goalMove.amount} USDC out of ${namedGoal.name}.`,
+            'success',
+          ),
+        );
+        void queryClient.invalidateQueries();
+      } catch (err) {
+        console.error('[vlora] target move failed', err);
+        addMessage(agentMsg(describeWalletError(err), 'error'));
+      } finally {
+        setMoneyBusy(false);
+        setMoneyStep('');
+        thinkingRef.current = false;
+        setIsThinking(false);
+      }
+      return true;
+    }
+
+    const earn = parseEarn(text, tabRef.current === 'earn');
     if (earn) {
       addMessage(userMsg(text));
       if (!isConnected || !address) {
