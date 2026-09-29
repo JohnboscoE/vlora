@@ -25,13 +25,14 @@ import { parseBill, parseCashOut, parseSweep } from './utils/moneyIntent';
 import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
 import { TabStrip, type TabItem } from './components/TabStrip';
 import { ComingSoon } from './components/ComingSoon';
+import { InsightsPanel } from './components/InsightsPanel';
 import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
 import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
 import { watchPendingActivity } from './lib/watchPending';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt, MessageSquare, Clock3 } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt, MessageSquare, Clock3, TrendingUp } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -302,6 +303,7 @@ export default function App() {
     { id: 'cashout', label: 'Cash out', icon: Banknote },
     { id: 'earn', label: 'Earn', icon: PiggyBank },
     { id: 'deposit', label: 'Add funds', icon: ArrowDownToLine },
+    { id: 'activity', label: 'Activity', icon: TrendingUp },
     { id: 'history', label: 'History', icon: History },
     { id: 'wallet', label: 'Agent wallet', icon: Bot },
     { id: 'next', label: "What's next", icon: Clock3 },
@@ -1181,6 +1183,17 @@ export default function App() {
       );
       return true;
     }
+    if (['/spending', '/insights', '/chart', '/statement'].includes(cmd)) {
+      addMessage(userMsg(command.trim()));
+      setTab('activity');
+      addMessage(
+        agentMsg(
+          'Activity is open — what you spent by day, week, month or year. Tap a point to see what that period went on, and there are statement downloads at the bottom.',
+          'info',
+        ),
+      );
+      return true;
+    }
     if (['/history', '/activity', '/receipts', '/transactions'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setTab('history');
@@ -1849,6 +1862,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   {tab === 'cashout' && <OfframpPanel />}
                   {tab === 'earn' && <EarnPanel />}
                   {tab === 'deposit' && <DepositPanel />}
+                  {tab === 'activity' && <InsightsPanel />}
                   {tab === 'history' && <HistoryPanel />}
                   {tab === 'wallet' && wrongChain && (
                     <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">

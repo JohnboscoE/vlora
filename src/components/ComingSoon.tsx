@@ -17,19 +17,9 @@ interface Planned {
  */
 const PLANNED: Planned[] = [
   {
-    name: 'Statement of account',
-    what: 'A statement for any period, downloaded or emailed to you.',
-    blockedBy: 'Being built next — every transaction is already recorded, so this is formatting, not new rails.',
-  },
-  {
-    name: 'Spending breakdown',
-    what: 'Where the money went: airtime, bills, swaps, in and out, by week or month.',
-    blockedBy: 'Being built next, from the history this app already keeps.',
-  },
-  {
     name: 'Savings targets',
     what: 'Put money aside toward a goal and watch it fill.',
-    blockedBy: 'Needs Earn deposits to be split per goal — buildable, not yet started.',
+    blockedBy: 'Next up. Earn already holds the money; this adds goals on top of it.',
   },
   {
     name: 'Group saving (TeamUp)',
@@ -45,6 +35,11 @@ const PLANNED: Planned[] = [
     name: 'Company treasury',
     what: 'A shared balance with several signers, where a majority approves each payment.',
     blockedBy: 'A multisig contract and a role system. After the group-saving contract is audited.',
+  },
+  {
+    name: 'Emailing a statement',
+    what: 'Have a statement sent to your inbox instead of downloading it.',
+    blockedBy: 'Needs a mail sender and an address to send from. The statement itself is built — Activity has CSV and PDF now.',
   },
   {
     name: 'Exam PINs (WAEC, JAMB, NECO)',
@@ -76,8 +71,8 @@ export function ComingSoon() {
           <Clock3 className="size-4 text-brand" /> What&apos;s next
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
-          Sending, swapping, bills, cashing out, Earn and the agent wallet work today on {ACTIVE_CHAIN.name}. These don&apos;t yet, and
-          each line says what it is waiting on.
+          Sending, swapping, bills, cashing out, bank deposits, Earn, spending charts, statements and the agent wallet work today on{' '}
+          {ACTIVE_CHAIN.name}. These don&apos;t yet, and each line says what it is waiting on.
         </p>
       </div>
 
