@@ -21,7 +21,8 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { BillsPanel } from './components/BillsPanel';
 import type { BillCategory } from './lib/bills';
 import { MoneyConfirm, type MoneyPlan } from './components/MoneyConfirm';
-import { parseBill, parseCashOut, parseSweep } from './utils/moneyIntent';
+import { parseBill, parseCashOut, parseEarn, parseSweep } from './utils/moneyIntent';
+import { depositToVault, exploreVaults, getPosition, withdrawFromVault } from './lib/earn';
 import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
 import { TabStrip, type TabItem } from './components/TabStrip';
 import { ComingSoon } from './components/ComingSoon';
@@ -276,7 +277,11 @@ export default function App() {
    * everything else is stuffed inside — six collapsed panels above the messages
    * left no messages on a phone. Slash commands still work: they switch tab.
    */
-  const [tab, setTab] = useState('chat');
+  const [tab, setTabState] = useState('chat');
+  const setTab = (next: string) => {
+    tabRef.current = next;
+    setTabState(next);
+  };
   // "/airtime", "/data", "/electricity", "/tv" and "/bills" open the same panel on different tabs
   const [billsOpen, setBillsOpen] = useState(false);
   const [billsCategory, setBillsCategory] = useState<BillCategory>('airtime');
@@ -300,6 +305,10 @@ export default function App() {
   const showClaimName = ARC_NAMES_LIVE && isConnected && !wrongChain && !myArcName;
   const usdcFact = getUsdc(ACTIVE_CHAIN_ID);
 
+  // What was said on the tab being shown. The Chat tab keeps the whole record,
+  // so a conversation held on Airtime is still there in one place afterwards.
+  const tabMessages = messages.filter((m) => m.tab === tab);
+
   /** The app's sections. The chat is one of them, not the container for the rest. */
   const TABS: TabItem[] = [
     { id: 'chat', label: 'Chat', icon: MessageSquare },
@@ -321,7 +330,10 @@ export default function App() {
     setMessages((prev) => [...prev, msg]);
   });
 
-  const addMessage = (msg: ChatMessageData) => addMessageRef.current(msg);
+  // The tab a message belongs to, read at the moment it is added rather than
+  // from state a callback captured earlier
+  const tabRef = useRef('chat');
+  const addMessage = (msg: ChatMessageData) => addMessageRef.current({ tab: tabRef.current, ...msg });
 
   // Step trackers are updated in place as a transaction progresses
   function setStep(messageId: string, index: number, state: StepState) {
@@ -1372,6 +1384,63 @@ export default function App() {
       return true;
     }
 
+    const earn = parseEarn(text);
+    if (earn) {
+      addMessage(userMsg(text));
+      if (!isConnected || !address) {
+        addMessage(agentMsg('Connect your wallet or sign in first.', 'info'));
+        return true;
+      }
+      thinkingRef.current = true;
+      setIsThinking(true);
+      try {
+        const vaults = await exploreVaults();
+        const vault = vaults[0];
+        if (!vault) throw new Error(`No savings vault is available on ${ACTIVE_CHAIN.name} right now.`);
+
+        let amount = earn.amount;
+        if (amount === 'all') {
+          const position = earn.action === 'withdraw' ? await getPosition(vault.address) : null;
+          if (earn.action === 'deposit') throw new Error('Say how much to put in — "all" would leave nothing for fees.');
+          if (!position || Number(position.balance) <= 0) throw new Error(`There is nothing in ${vault.name} to take out.`);
+          amount = String(position.balance);
+        }
+
+        setMoneyStep(earn.action === 'withdraw' ? `Taking ${amount} USDC out of ${vault.name}…` : `Putting ${amount} USDC into ${vault.name}…`);
+        setMoneyBusy(true);
+        if (earn.action === 'withdraw') await withdrawFromVault(vault.address, amount);
+        else await depositToVault(vault.address, amount);
+
+        recordActivity(address, {
+          kind: 'earn',
+          status: 'success',
+          title: earn.action === 'withdraw' ? `Withdrew ${amount} USDC from ${vault.name}` : `Deposited ${amount} USDC into ${vault.name}`,
+          amount,
+          token: 'USDC',
+          counterparty: vault.address,
+          detail: `${vault.name} · ${vault.protocol}`,
+        });
+        addMessage(
+          agentMsg(
+            earn.action === 'withdraw'
+              ? `Took ${amount} USDC out of ${vault.name}. It is back in your wallet.`
+              : `Put ${amount} USDC into ${vault.name}, earning ${(vault.apy * 100).toFixed(2)}% while it sits there.`,
+            'success',
+          ),
+        );
+        void queryClient.invalidateQueries();
+      } catch (err) {
+        console.error('[vlora] earn command failed', err);
+        addMessage(agentMsg(describeWalletError(err), 'error'));
+      } finally {
+        setMoneyBusy(false);
+        setMoneyStep('');
+        thinkingRef.current = false;
+        setIsThinking(false);
+      }
+      return true;
+    }
+
     const cashOut = parseCashOut(text);
     const bill = cashOut ? null : parseBill(text);
     if (!cashOut && !bill) return false;
@@ -1443,10 +1512,9 @@ export default function App() {
     if (thinkingRef.current) return;
     // Commands that open a tab handle their own navigation
     if (handleModeCommand(text)) return;
-    // Anything else is answered in the chat, so go there rather than replying
-    // somewhere the person cannot see — the composer is on every tab
-    setTab('chat');
     if (agentMode && agentVault?.active) return handleAgentMessage(text);
+    // A typed action does what the tab's buttons do, and the reply appears on
+    // the tab it was typed on — every tab keeps its own thread
     if (await handleMoneyMessage(text)) return;
     addMessage(userMsg(text));
 
@@ -1893,6 +1961,16 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                     </p>
                   )}
                   {tab === 'next' && <ComingSoon />}
+
+                  {/* This tab's own thread: what was said here, answered here */}
+                  {tabMessages.length > 0 && (
+                    <div className="mt-4 space-y-4 border-t border-line/10 pt-4">
+                      {tabMessages.map((msg) => (
+                        <ChatMessage key={msg.id} msg={msg} />
+                      ))}
+                      <AnimatePresence>{isThinking && <TypingBubble key="typing-tab" />}</AnimatePresence>
+                    </div>
+                  )}
                   {/* Always mounted: this is what finds the vault behind the agent toggle */}
                   {!wrongChain && (
                     <div className={tab === 'wallet' ? undefined : 'hidden'}>

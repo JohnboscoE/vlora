@@ -25,6 +25,11 @@ export interface ChatMessageData {
   steps?: TxStep[];
   /** Shows a copy button, e.g. for a payment request link */
   copyText?: string;
+  /**
+   * Which tab this was said on. Each tab shows its own thread so a reply lands
+   * where the question was asked; the Chat tab shows every message regardless.
+   */
+  tab?: string;
   timestamp: number;
 }
 

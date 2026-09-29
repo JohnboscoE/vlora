@@ -201,3 +201,44 @@ export function parseSweep(input: string): SweepIntent | null {
 
   return { type: 'sweep', to: to[0] };
 }
+
+export interface EarnIntent {
+  type: 'earn';
+  action: 'deposit' | 'withdraw';
+  /** Whole USDC, or "all" for everything in the vault */
+  amount: string | 'all';
+}
+
+/**
+ * "withdraw 5 USDC from earn", "take everything out of earn", "put 20 in earn".
+ *
+ * Earn is named explicitly for a withdrawal, because "withdraw 20" on its own is
+ * ambiguous — it could mean a bank cash-out — and guessing wrong moves money the
+ * wrong way. A deposit is safer to infer: "save 20 in earn" can only mean one
+ * thing.
+ */
+export function parseEarn(input: string): EarnIntent | null {
+  const text = input.trim();
+  if (/\b(how|what|can i|does|should|is it)\b/i.test(text) && !/\b(withdraw|deposit|put|take)\b/i.test(text)) return null;
+
+  const mentionsEarn = /\b(earn|vault|savings vault|lending)\b/i.test(text);
+  // "take 2.5 out" puts a decimal point between the two words, so the gap must
+  // allow one — an earlier version excluded dots and missed every decimal amount
+  const takesOut = /\b(withdraw|cash in|redeem|pull out)\b/i.test(text) || /\btake\b.{0,40}?\bout\b/i.test(text);
+  const putsIn = /\b(deposit|put|add|move|save|stake|lend)\b/i.test(text);
+
+  if (!mentionsEarn) return null;
+  if (!takesOut && !putsIn) return null;
+
+  const everything = /\b(all|everything|the lot|max)\b/i.test(text);
+  const amount = text.replace(/0x[a-fA-F0-9]+/g, ' ').match(/(\d[\d,]*(?:\.\d+)?)/);
+  if (!everything && !amount) return null;
+
+  return {
+    type: 'earn',
+    // Taking out wins when both words appear: "take all out and add to earn"
+    // is not a sentence anyone means as a deposit
+    action: takesOut ? 'withdraw' : 'deposit',
+    amount: everything ? 'all' : (amount?.[1] ?? '').replace(/,/g, ''),
+  };
+}

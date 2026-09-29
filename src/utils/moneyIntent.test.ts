@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBill, parseCashOut, parseSweep } from './moneyIntent';
+import { parseBill, parseCashOut, parseEarn, parseSweep } from './moneyIntent';
 
 // These decide what a typed message means before any money is quoted, so the
 // cases that matter are the ones where a wrong reading would cost someone: an
@@ -139,5 +139,38 @@ describe('parseSweep — emptying a wallet needs both "all" and a destination', 
   it('leaves questions alone', () => {
     expect(parseSweep('how do I send everything to another wallet?')).toBeNull();
     expect(parseSweep('can i move all my assets?')).toBeNull();
+  });
+});
+
+describe('parseEarn — the Earn tab, typed', () => {
+  it('reads a withdrawal', () => {
+    expect(parseEarn('withdraw 5 USDC from earn')).toEqual({ type: 'earn', action: 'withdraw', amount: '5' });
+    expect(parseEarn('take 2.5 out of earn')).toEqual({ type: 'earn', action: 'withdraw', amount: '2.5' });
+  });
+
+  it('reads "everything"', () => {
+    expect(parseEarn('withdraw all from earn')).toEqual({ type: 'earn', action: 'withdraw', amount: 'all' });
+    expect(parseEarn('take everything out of the earn vault')).toMatchObject({ action: 'withdraw', amount: 'all' });
+  });
+
+  it('reads a deposit', () => {
+    expect(parseEarn('put 20 in earn')).toEqual({ type: 'earn', action: 'deposit', amount: '20' });
+    expect(parseEarn('deposit 100 USDC into earn')).toEqual({ type: 'earn', action: 'deposit', amount: '100' });
+  });
+
+  it('insists Earn is named, because "withdraw 20" could mean a bank', () => {
+    expect(parseEarn('withdraw 20')).toBeNull();
+    expect(parseEarn('withdraw 20 USDC')).toBeNull();
+  });
+
+  it('leaves questions and other rails alone', () => {
+    expect(parseEarn('how does earn work?')).toBeNull();
+    expect(parseEarn('what is the earn rate')).toBeNull();
+    expect(parseEarn('cash out 20 USDC to gtbank 0123456789')).toBeNull();
+  });
+
+  it('needs an amount', () => {
+    expect(parseEarn('withdraw from earn')).toBeNull();
+    expect(parseEarn('put money in earn')).toBeNull();
   });
 });
