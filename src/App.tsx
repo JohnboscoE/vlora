@@ -1441,7 +1441,11 @@ export default function App() {
 
   async function handleUserMessage(text: string) {
     if (thinkingRef.current) return;
+    // Commands that open a tab handle their own navigation
     if (handleModeCommand(text)) return;
+    // Anything else is answered in the chat, so go there rather than replying
+    // somewhere the person cannot see — the composer is on every tab
+    setTab('chat');
     if (agentMode && agentVault?.active) return handleAgentMessage(text);
     if (await handleMoneyMessage(text)) return;
     addMessage(userMsg(text));

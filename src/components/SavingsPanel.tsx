@@ -159,7 +159,7 @@ export function SavingsPanel() {
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold text-ink">{goal.name}</p>
                     <p className="mt-0.5 text-[11px] text-muted">
-                      {usdc(goal.saved)} of {usdc(goal.target)} USDC
+                      {usdc(goal.saved)} of {usdc(goal.target)} USDC{goal.saved > 0 ? ' · held in the Earn vault' : ''}
                       {progress.done && <span className="text-success"> · reached</span>}
                       {!progress.done && progress.perDay != null && (
                         <span>
@@ -181,10 +181,10 @@ export function SavingsPanel() {
                 {confirmRemove === goal.id && (
                   <div className="mt-2 rounded-xl border border-danger/30 bg-danger/5 p-2.5">
                     <p className="text-[11px] leading-relaxed text-ink">
-                      This target still holds {usdc(goal.saved)} USDC. The money is in the Earn vault and stays there — removing the
-                      target only removes the label, and you would take the money out from Earn instead.
+                      This target still holds {usdc(goal.saved)} USDC, and that money is in the Earn vault. Take it out first, then the
+                      target can be removed — a target with money in it stays on the list so the money never goes quiet.
                     </p>
-                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => {
                           setAmounts((prev) => ({ ...prev, [goal.id]: String(goal.saved) }));
@@ -194,15 +194,6 @@ export function SavingsPanel() {
                         className="rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-ink"
                       >
                         Take it out
-                      </button>
-                      <button
-                        onClick={() => {
-                          removeGoal(address, goal.id);
-                          setConfirmRemove(null);
-                        }}
-                        className="rounded-lg border border-danger/30 px-2 py-1.5 text-[11px] font-semibold text-danger"
-                      >
-                        Remove anyway
                       </button>
                       <button
                         onClick={() => setConfirmRemove(null)}
