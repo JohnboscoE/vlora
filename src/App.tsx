@@ -8,7 +8,7 @@ import { erc20Abi } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { WalletButton } from './components/WalletButton';
 import { toast } from 'sonner';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 
 import { ChatMessage, TypingBubble, type ChatMessageData, type StepState } from './components/ChatMessage';
 import { ChatInput, type SlashCommand } from './components/ChatInput';
@@ -23,13 +23,15 @@ import type { BillCategory } from './lib/bills';
 import { MoneyConfirm, type MoneyPlan } from './components/MoneyConfirm';
 import { parseBill, parseCashOut, parseSweep } from './utils/moneyIntent';
 import { SweepConfirm, type SweepPlan } from './components/SweepConfirm';
+import { TabStrip, type TabItem } from './components/TabStrip';
+import { ComingSoon } from './components/ComingSoon';
 import { resolveBill, resolveCashOut } from './lib/resolveMoneyIntent';
 import { runBillPayment, runCashOut } from './lib/runMoney';
 import { recordActivity, type NewActivity } from './lib/activity';
 import { watchPendingActivity } from './lib/watchPending';
 import { LogoMark } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
-import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt } from 'lucide-react';
+import { ArrowRight, Wallet, ArrowUpDown, HelpCircle, Users, FileSpreadsheet, Link2, UserPlus, BookUser, Trash2, AtSign, Bot, LogOut, ArrowDownToLine, PiggyBank, Banknote, History, Receipt, MessageSquare, Clock3 } from 'lucide-react';
 import { getAgentFactory } from './agent-config';
 import { isAddress } from 'viem';
 import { batchToCommand, contactNameProblem, resolveContacts, useContacts, useSavedBatches } from './lib/contacts';
@@ -264,6 +266,12 @@ export default function App() {
   const [offrampOpen, setOfframpOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  /**
+   * Which section is on screen. The chat is one of them rather than the thing
+   * everything else is stuffed inside — six collapsed panels above the messages
+   * left no messages on a phone. Slash commands still work: they switch tab.
+   */
+  const [tab, setTab] = useState('chat');
   // "/airtime", "/data", "/electricity", "/tv" and "/bills" open the same panel on different tabs
   const [billsOpen, setBillsOpen] = useState(false);
   const [billsCategory, setBillsCategory] = useState<BillCategory>('airtime');
@@ -282,37 +290,24 @@ export default function App() {
   // until it finishes (src/lib/watchPending.ts)
   useEffect(() => watchPendingActivity(address), [address]);
 
-  /**
-   * Which panel the phone shows over the chat. Only one at a time, and only when
-   * the person asked for it — on a small screen the collapsed rows added up to
-   * more than the screen had.
-   */
-  const closeMobilePanel = () => {
-    setBillsOpen(false);
-    setOfframpOpen(false);
-    setEarnOpen(false);
-    setDepositOpen(false);
-    setHistoryOpen(false);
-    setAgentPanelOpen(false);
-  };
-
-  const mobilePanel = billsOpen
-    ? 'bills'
-    : offrampOpen
-      ? 'offramp'
-      : earnOpen
-        ? 'earn'
-        : depositOpen
-          ? 'deposit'
-          : historyOpen
-            ? 'history'
-            : agentPanelOpen && !wrongChain
-              ? 'agent'
-              : null;
   const arcNameFee = useArcNameFee();
   const myArcName = useMyArcName(isConnected ? address : undefined, nameRefresh);
   const showClaimName = ARC_NAMES_LIVE && isConnected && !wrongChain && !myArcName;
   const usdcFact = getUsdc(ACTIVE_CHAIN_ID);
+
+  /** The app's sections. The chat is one of them, not the container for the rest. */
+  const TABS: TabItem[] = [
+    { id: 'chat', label: 'Chat', icon: MessageSquare },
+    { id: 'bills', label: 'Airtime & bills', icon: Receipt },
+    { id: 'cashout', label: 'Cash out', icon: Banknote },
+    { id: 'earn', label: 'Earn', icon: PiggyBank },
+    { id: 'deposit', label: 'Add funds', icon: ArrowDownToLine },
+    { id: 'history', label: 'History', icon: History },
+    { id: 'wallet', label: 'Agent wallet', icon: Bot },
+    { id: 'next', label: "What's next", icon: Clock3 },
+  ];
+
+
 
   // Keep a stable ref for addMessage so effects can call it without listing it as a dependency
   const addMessageRef = useRef((msg: ChatMessageData) => {
@@ -1122,7 +1117,7 @@ export default function App() {
     const cmd = command.trim().toLowerCase();
     if (['/earn', '/invest', '/investments', '/yield', '/save'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setEarnOpen(true);
+      setTab('earn');
       addMessage(
         agentMsg(
           isConnected
@@ -1149,7 +1144,7 @@ export default function App() {
     if (cmd in billsCommands) {
       addMessage(userMsg(command.trim()));
       setBillsCategory(billsCommands[cmd] ?? 'airtime');
-      setBillsOpen(true);
+      setTab('bills');
       addMessage(
         agentMsg(
           isConnected
@@ -1162,7 +1157,7 @@ export default function App() {
     }
     if (['/cashout', '/cash-out', '/offramp', '/withdraw', '/bank'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setOfframpOpen(true);
+      setTab('cashout');
       addMessage(
         agentMsg(
           isConnected
@@ -1175,7 +1170,7 @@ export default function App() {
     }
     if (['/wallet', '/agent-wallet', '/agentwallet', '/vault'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setAgentPanelOpen(true);
+      setTab('wallet');
       addMessage(
         agentMsg(
           isConnected
@@ -1188,7 +1183,7 @@ export default function App() {
     }
     if (['/history', '/activity', '/receipts', '/transactions'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setHistoryOpen(true);
+      setTab('history');
       addMessage(
         agentMsg(
           'History is open in the panel — payments, swaps, bridges, cash-outs and bills, each with a receipt you can download or share.',
@@ -1209,7 +1204,7 @@ export default function App() {
     }
     if (['/deposit', '/add', '/fund', '/add funds'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setDepositOpen(true);
+      setTab('deposit');
       addMessage(
         agentMsg(
           isConnected
@@ -1723,19 +1718,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               />
             )}
 
-            {isConnected && <DepositPanel collapsible open={depositOpen || undefined} onOpenChange={setDepositOpen} />}
 
-            {isConnected && <EarnPanel collapsible open={earnOpen || undefined} onOpenChange={setEarnOpen} />}
-
-            {isConnected && <OfframpPanel collapsible open={offrampOpen || undefined} onOpenChange={setOfframpOpen} />}
-
-            {isConnected && (
-              <BillsPanel collapsible open={billsOpen || undefined} onOpenChange={setBillsOpen} category={billsCategory} />
-            )}
-
-            {isConnected && <HistoryPanel collapsible open={historyOpen || undefined} onOpenChange={setHistoryOpen} />}
-
-            {isConnected && !wrongChain && <AgentPanel onVaultChange={onAgentVaultChange} />}
 
             <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Try saying</h2>
@@ -1855,7 +1838,35 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
             </div>
           )}
 
-          <div className="flex items-center justify-between border-b border-line/10 px-5 py-3.5 md:px-6">
+          <TabStrip tabs={TABS} active={tab} onSelect={setTab} />
+
+          <div className={tab === 'chat' ? 'hidden' : 'min-h-0 flex-1 overflow-y-auto p-3 md:p-4'}>
+              {!isConnected && tab !== 'next' ? (
+                <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">Connect your wallet or sign in to use this.</p>
+              ) : (
+                <>
+                  {tab === 'bills' && <BillsPanel category={billsCategory} />}
+                  {tab === 'cashout' && <OfframpPanel />}
+                  {tab === 'earn' && <EarnPanel />}
+                  {tab === 'deposit' && <DepositPanel />}
+                  {tab === 'history' && <HistoryPanel />}
+                  {tab === 'wallet' && wrongChain && (
+                    <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">
+                      Switch your wallet to {ACTIVE_CHAIN.name} to manage the agent wallet.
+                    </p>
+                  )}
+                  {tab === 'next' && <ComingSoon />}
+                  {/* Always mounted: this is what finds the vault behind the agent toggle */}
+                  {!wrongChain && (
+                    <div className={tab === 'wallet' ? undefined : 'hidden'}>
+                      <AgentPanel onVaultChange={onAgentVaultChange} />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+          <div className={tab === 'chat' ? 'flex items-center justify-between border-b border-line/10 px-5 py-3.5 md:px-6' : 'hidden'}>
             <div>
               <h1 className="text-sm font-semibold text-ink">{agentMode ? 'Agent mode' : 'Payments assistant'}</h1>
               <p className={agentMode ? 'text-xs text-brand' : 'text-xs text-muted'}>
@@ -1887,14 +1898,17 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
           </div>
 
           {/* Messages */}
-          <div ref={listRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 md:px-6">
+          <div
+            ref={listRef}
+            className={tab === 'chat' ? 'min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 md:px-6' : 'hidden'}
+          >
             {messages.map((msg) => (
               <ChatMessage key={msg.id} msg={msg} />
             ))}
             <AnimatePresence>{isThinking && <TypingBubble key="typing" />}</AnimatePresence>
           </div>
 
-          {/* Composer */}
+          {/* Composer: typing is how this app works, so it stays on every tab */}
           <div className="border-t border-line/10 p-3 md:p-4">
             {!isDesktop && messages.length === 1 && (
               <div className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -1925,33 +1939,6 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
           </div>
         </main>
       </div>
-
-      {/* On a phone a panel opens over the chat instead of pushing it off screen */}
-      <AnimatePresence>
-        {!isDesktop && isConnected && mobilePanel && (
-          <motion.div
-            initial={{ y: 24, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 24, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-x-0 bottom-0 z-40 max-h-[82vh] overflow-y-auto overscroll-contain p-3 pb-4"
-          >
-            {mobilePanel === 'deposit' && <DepositPanel collapsible open onOpenChange={setDepositOpen} />}
-            {mobilePanel === 'earn' && <EarnPanel collapsible open onOpenChange={setEarnOpen} />}
-            {mobilePanel === 'offramp' && <OfframpPanel collapsible open onOpenChange={setOfframpOpen} />}
-            {mobilePanel === 'bills' && <BillsPanel collapsible open onOpenChange={setBillsOpen} category={billsCategory} />}
-            {mobilePanel === 'history' && <HistoryPanel collapsible open onOpenChange={setHistoryOpen} />}
-            {mobilePanel === 'agent' && <AgentPanel collapsible open onOpenChange={setAgentPanelOpen} onVaultChange={onAgentVaultChange} />}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {!isDesktop && isConnected && mobilePanel && (
-        <button
-          aria-label="Close panel"
-          onClick={closeMobilePanel}
-          className="fixed inset-0 z-30 bg-ink/20 backdrop-blur-[2px]"
-        />
-      )}
 
       {/* Emptying a wallet gets its own confirmation, stricter than the rest */}
       <AnimatePresence>
