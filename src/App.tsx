@@ -189,11 +189,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'balance', label: 'Check balance', hint: 'Your USDC on Arc', icon: Wallet, action: 'submit', template: "What's my balance?" },
   { id: 'deposit', label: 'Add funds', hint: 'Your deposit address, QR code, or buy with a card', icon: ArrowDownToLine, action: 'submit', template: '/deposit' },
   { id: 'earn', label: 'Earn on idle USDC', hint: 'Deposit into a lending vault on Arc, withdraw any time', icon: PiggyBank, action: 'submit', template: '/earn' },
-  { id: 'savings', label: 'Savings targets', hint: 'Save toward something; it earns in the vault while it waits', icon: Target, action: 'submit', template: '/savings' },
+  { id: 'savings', label: 'Savings targets', hint: 'Save toward something, inside Earn', icon: Target, action: 'submit', template: '/savings' },
   { id: 'cashout', label: 'Cash out to a bank', hint: 'USDC to naira, shillings and more, paid to a bank account', icon: Banknote, action: 'submit', template: '/cashout' },
   { id: 'airtime', label: 'Airtime, data & bills', hint: 'Top up a phone or pay electricity with USDC', icon: Receipt, action: 'submit', template: '/airtime' },
   { id: 'history', label: 'History & receipts', hint: 'Everything you have done here, with a receipt to download', icon: History, action: 'submit', template: '/history' },
-  { id: 'activity', label: 'Spending & statements', hint: 'What you spent by day, week or month, and a statement to take away', icon: TrendingUp, action: 'submit', template: '/spending' },
+  { id: 'activity', label: 'Spending chart', hint: 'What you spent by day, week or month, right here in the chat', icon: TrendingUp, action: 'submit', template: '/activity' },
   { id: 'wallet', label: 'Agent wallet', hint: 'Create, fund or limit the wallet the AI spends from', icon: Bot, action: 'submit', template: '/wallet' },
   { id: 'request', label: 'Request payment', hint: 'Create a link someone can pay', icon: Link2, action: 'insert', template: 'Request | USDC' },
   { id: 'contact', label: 'Save a contact', hint: 'add contact alice 0x…', icon: UserPlus, action: 'insert', template: 'Add contact |' },
@@ -316,9 +316,7 @@ export default function App() {
     { id: 'bills', label: 'Airtime & bills', icon: Receipt },
     { id: 'cashout', label: 'Cash out', icon: Banknote },
     { id: 'earn', label: 'Earn', icon: PiggyBank },
-    { id: 'savings', label: 'Targets', icon: Target },
     { id: 'deposit', label: 'Add funds', icon: ArrowDownToLine },
-    { id: 'activity', label: 'Activity', icon: TrendingUp },
     { id: 'history', label: 'History', icon: History },
     { id: 'wallet', label: 'Agent wallet', icon: Bot },
     { id: 'next', label: "What's next", icon: Clock3 },
@@ -1137,7 +1135,7 @@ export default function App() {
     const cmd = command.trim().toLowerCase();
     if (['/save', '/savings', '/target', '/targets', '/goal', '/goals'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setTab('savings');
+      setTab('earn');
       addMessage(
         agentMsg(
           isConnected
@@ -1214,18 +1212,17 @@ export default function App() {
       );
       return true;
     }
-    if (['/spending', '/insights', '/chart', '/statement'].includes(cmd)) {
+    if (['/activity', '/spending', '/insights', '/chart', '/statement'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
-      setTab('activity');
-      addMessage(
-        agentMsg(
-          'Activity is open — what you spent by day, week, month or year. Tap a point to see what that period went on, and there are statement downloads at the bottom.',
-          'info',
-        ),
-      );
+      // The answer to a question about money over time is a picture of it, here,
+      // rather than a sentence pointing at another tab
+      addMessage({
+        ...agentMsg('Here is what you have spent. Tap a point for that period, or switch the scale.', 'info'),
+        chart: 'spend',
+      });
       return true;
     }
-    if (['/history', '/activity', '/receipts', '/transactions'].includes(cmd)) {
+    if (['/history', '/receipts', '/transactions'].includes(cmd)) {
       addMessage(userMsg(command.trim()));
       setTab('history');
       addMessage(
@@ -1398,7 +1395,7 @@ export default function App() {
         return true;
       }
       addGoal(address, newGoal.name, Number(newGoal.amount), newGoal.due ?? undefined);
-      setTab('savings');
+      setTab('earn');
       addMessage(
         agentMsg(
           `Target set: ${newGoal.name}, ${newGoal.amount} USDC${
@@ -2031,11 +2028,19 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                 <>
                   {tab === 'bills' && <BillsPanel category={billsCategory} />}
                   {tab === 'cashout' && <OfframpPanel />}
-                  {tab === 'earn' && <EarnPanel />}
-                  {tab === 'savings' && <SavingsPanel />}
+                  {tab === 'earn' && (
+                    <div className="space-y-4">
+                      <EarnPanel />
+                      <SavingsPanel />
+                    </div>
+                  )}
                   {tab === 'deposit' && <DepositPanel />}
-                  {tab === 'activity' && <InsightsPanel />}
-                  {tab === 'history' && <HistoryPanel />}
+                  {tab === 'history' && (
+                    <div className="space-y-4">
+                      <HistoryPanel />
+                      <InsightsPanel />
+                    </div>
+                  )}
                   {tab === 'wallet' && wrongChain && (
                     <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">
                       Switch your wallet to {ACTIVE_CHAIN.name} to manage the agent wallet.

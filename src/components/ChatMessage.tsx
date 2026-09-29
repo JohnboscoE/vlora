@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, AlertCircle, Loader2, ExternalLink, Circle, Copy, Check, XCircle } from 'lucide-react';
+import { SpendSummary } from '@/components/SpendSummary';
 import { LogoMark } from './Logo';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,8 @@ export interface ChatMessageData {
    * where the question was asked; the Chat tab shows every message regardless.
    */
   tab?: string;
+  /** Renders the spending chart in the message, for "/activity" */
+  chart?: 'spend';
   timestamp: number;
 }
 
@@ -125,6 +128,7 @@ export function ChatMessage({ msg }: { msg: ChatMessageData }) {
           </div>
 
           {msg.steps && <StepTracker steps={msg.steps} />}
+          {msg.chart === 'spend' && <SpendSummary />}
           {msg.copyText && <CopyButton text={msg.copyText} />}
 
           {msg.explorerUrl && msg.txHash && (
