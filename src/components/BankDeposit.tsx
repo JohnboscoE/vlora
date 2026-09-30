@@ -136,7 +136,7 @@ export function BankDeposit() {
 
   if (info && !info.enabled) {
     return (
-      <p className="rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+      <p className="rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
         Bank transfers aren&apos;t switched on here yet{info.reason ? ` (${info.reason})` : ''}.
       </p>
     );
@@ -145,27 +145,27 @@ export function BankDeposit() {
   if (order && payTo) {
     return (
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold text-ink">{describeDepositStatus(order.status)}</p>
-        <div className="rounded-xl bg-surface-2 px-3 py-2.5">
-          <p className="text-[11px] text-muted">Transfer exactly</p>
+        <p className="text-xs font-semibold text-ink">{describeDepositStatus(order.status)}</p>
+        <div className="rounded-control bg-surface-2 px-3 py-2.5">
+          <p className="text-xs text-muted">Transfer exactly</p>
           <p className="text-sm font-semibold text-ink">
             {payTo.amountToTransfer ?? order.amount} {payTo.currency ?? currency}
           </p>
-          <p className="mt-2 text-[11px] text-muted">To</p>
+          <p className="mt-2 text-xs text-muted">To</p>
           <button onClick={copy} className="flex w-full items-center justify-between gap-2 text-left">
             <span className="font-mono text-sm text-ink">{payAccount}</span>
             {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5 text-subtle" />}
           </button>
-          <p className="text-[11px] text-ink-2">
+          <p className="text-xs text-ink-2">
             {payTo.bankName ?? payTo.institution} · {payTo.accountName}
           </p>
-          {payTo.memo && <p className="mt-1 text-[11px] text-muted">Reference: {payTo.memo}</p>}
+          {payTo.memo && <p className="mt-1 text-xs text-muted">Reference: {payTo.memo}</p>}
         </div>
-        <p className="text-[11px] leading-relaxed text-subtle">
+        <p className="text-xs leading-relaxed text-subtle">
           Pay from the account you gave, or it may be refused. The USDC arrives on {BRIDGE_CHAIN_LABEL}; moving it to{' '}
           {ACTIVE_CHAIN.name} needs a little ETH there for now.
         </p>
-        <button onClick={() => setOrder(null)} className="w-full rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink">
+        <button onClick={() => setOrder(null)} className="w-full rounded-control border border-line/15 py-2 text-xs font-semibold text-ink">
           Start another
         </button>
       </div>
@@ -181,13 +181,13 @@ export function BankDeposit() {
           inputMode="decimal"
           placeholder={`Amount in ${currency}`}
           aria-label={`Amount in ${currency}`}
-          className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+          className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
         />
         <select
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
           aria-label="Currency"
-          className="rounded-xl border border-line/15 bg-surface px-2 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+          className="rounded-control border border-line/15 bg-surface px-2 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
         >
           {currencies.map((c) => (
             <option key={c.code} value={c.code}>
@@ -201,7 +201,7 @@ export function BankDeposit() {
         value={institution}
         onChange={(e) => setChosenBank(e.target.value)}
         aria-label="Your bank"
-        className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+        className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
       >
         <option value="">The bank you&apos;ll pay from…</option>
         {institutions.map((i) => (
@@ -218,13 +218,13 @@ export function BankDeposit() {
           inputMode="numeric"
           placeholder="Your account number"
           aria-label="Your account number"
-          className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+          className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
         />
         <button
           onClick={() => void verify()}
           disabled={!institution || accountNumber.length < 5 || verifying}
           className={cn(
-            'flex items-center gap-1.5 rounded-xl border border-line/15 px-3 text-xs font-semibold text-ink',
+            'flex items-center gap-1.5 rounded-control border border-line/15 px-3 text-xs font-semibold text-ink',
             (!institution || accountNumber.length < 5 || verifying) && 'opacity-40',
           )}
         >
@@ -232,20 +232,20 @@ export function BankDeposit() {
           Check
         </button>
       </div>
-      {accountName && <p className="text-[11px] font-medium text-success">{accountName}</p>}
+      {accountName && <p className="text-xs font-medium text-success">{accountName}</p>}
 
       <button
         onClick={() => void start()}
         disabled={!ready || busy}
         className={cn(
-          'flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink',
+          'flex w-full items-center justify-center gap-2 rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink',
           (!ready || busy) && 'opacity-40',
         )}
       >
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Building2 className="size-4" />}
         Get transfer details
       </button>
-      <p className="text-[11px] leading-relaxed text-subtle">
+      <p className="text-xs leading-relaxed text-subtle">
         You pay a virtual account from your own bank — no card. {symbol ? `Rates are Paycrest's. ` : ''}The USDC is released on{' '}
         {BRIDGE_CHAIN_LABEL}, since Paycrest doesn&apos;t settle on {ACTIVE_CHAIN.name} yet.
       </p>

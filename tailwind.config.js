@@ -33,6 +33,21 @@ export default {
         display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
       },
+      // The one step Tailwind's scale is missing. Nothing in the app goes below
+      // this: 10px text was legible on the machine it was written on and nowhere
+      // else. Meta and hint text is text-xs; this is for uppercase pills only.
+      fontSize: {
+        micro: ['0.6875rem', { lineHeight: '1rem' }],
+      },
+      // Three radii with a job each, instead of five picked by feel. A control is
+      // something you press or type in, a card is a surface that holds controls,
+      // and card-sm is a card nested inside another one.
+      borderRadius: {
+        control: '0.75rem',
+        'card-sm': '1rem',
+        card: '1.25rem',
+        pill: '9999px',
+      },
     },
   },
   plugins: [],

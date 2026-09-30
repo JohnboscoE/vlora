@@ -23,6 +23,7 @@ import { updateActivity } from '@/lib/activity';
 import { runBillPayment } from '@/lib/runMoney';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui';
 
 interface BillsPanelProps {
   collapsible?: boolean;
@@ -218,7 +219,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <Receipt className="size-4 text-brand" /> Airtime & bills
@@ -229,12 +230,12 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
   }
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Receipt className="size-4 text-brand" /> Airtime & bills
-            <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">Beta</span>
+            <span className="rounded-pill bg-brand/10 px-1.5 py-0.5 text-micro font-semibold uppercase tracking-wide text-brand">Beta</span>
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">Top up a phone or pay a bill with USDC. Bitrefill delivers it.</p>
         </div>
@@ -246,13 +247,13 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
       </div>
 
       {info && !info.enabled ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
+        <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
           Bill payments aren't switched on here yet{info.reason ? ` (${info.reason})` : ''}.
         </p>
       ) : !isConnected || !address ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to pay a bill.</p>
+        <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to pay a bill.</p>
       ) : stage === 'working' ? (
-        <p className="mt-4 flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-3 text-xs text-muted">
+        <p className="mt-4 flex items-center gap-2 rounded-control bg-surface-2 px-3 py-3 text-xs text-muted">
           <Loader2 className="size-3.5 shrink-0 animate-spin" /> {step || 'Working…'}
         </p>
       ) : stage === 'tracking' ? (
@@ -270,13 +271,13 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
             </div>
             <div className="flex justify-between">
               <dt className="text-muted">Reference</dt>
-              <dd className="max-w-[60%] truncate text-right font-mono text-[11px] text-ink-2">{invoice?.id}</dd>
+              <dd className="max-w-[60%] truncate text-right font-mono text-xs text-ink-2">{invoice?.id}</dd>
             </div>
           </dl>
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             Top-ups usually land within a minute. You can close this — "/history" keeps the receipt.
           </p>
-          <button onClick={reset} className="mt-3 w-full rounded-xl border border-line/15 py-2.5 text-xs font-semibold text-ink">
+          <button onClick={reset} className="mt-3 w-full rounded-control border border-line/15 py-2.5 text-xs font-semibold text-ink">
             Pay something else
           </button>
         </>
@@ -288,7 +289,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
                 key={c}
                 onClick={() => setCategory(c)}
                 className={cn(
-                  'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+                  'shrink-0 rounded-pill border px-2.5 py-1 text-xs font-semibold',
                   category === c ? 'border-brand/40 bg-brand/10 text-brand' : 'border-line/15 text-muted',
                 )}
               >
@@ -303,7 +304,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
               <select
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+                className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
               >
                 {COUNTRIES.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -321,7 +322,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
                   setValue('');
                 }}
                 disabled={products == null}
-                className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+                className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
               >
                 <option value="">{products == null ? 'Loading…' : products.length ? 'Choose…' : 'None available'}</option>
                 {(products ?? []).map((p) => (
@@ -334,7 +335,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
           </div>
 
           {products != null && products.length === 0 && (
-            <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+            <p className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
               {category === 'exams'
                 ? `Exam PINs aren't available through Bitrefill in ${COUNTRIES.find((c) => c.code === country)?.name ?? country} — WAEC, JAMB and NECO need a Nigerian biller, which is coming. Airtime, data, electricity and TV work today.`
                 : `Nothing is listed for this in ${COUNTRIES.find((c) => c.code === country)?.name ?? country} right now. Try another category or country.`}
@@ -349,7 +350,7 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
                   <select
                     value={packageId}
                     onChange={(e) => setChosenPackage(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+                    className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
                   >
                     <option value="">Choose…</option>
                     {product.packages.map((p) => (
@@ -366,20 +367,20 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
                   inputMode="decimal"
                   placeholder={product.range ? `${product.range.min}–${product.range.max} ${product.currency}` : `Amount in ${product.currency}`}
                   aria-label="Amount"
-                  className="mt-3 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                  className="mt-3 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
                 />
               )}
-              {amountProblem && <p className="mt-1.5 text-[11px] text-danger">{amountProblem}</p>}
+              {amountProblem && <p className="mt-1.5 text-xs text-danger">{amountProblem}</p>}
 
               <input
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value.replace(/[^\d+-]/g, ''))}
                 placeholder={recipientLabel(product, category)}
                 aria-label={recipientLabel(product, category)}
-                className="mt-3 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                className="mt-3 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
               />
               {(category === 'airtime' || category === 'data') && (
-                <p className="mt-1.5 text-[11px] text-subtle">Include the country code, e.g. +2348012345678.</p>
+                <p className="mt-1.5 text-xs text-subtle">Include the country code, e.g. +2348012345678.</p>
               )}
             </>
           )}
@@ -387,16 +388,16 @@ export function BillsPanel({ collapsible = false, open: openProp, onOpenChange, 
           <button
             onClick={() => void pay()}
             disabled={!ready}
-            className={cn('mt-4 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink', !ready && 'opacity-40')}
+            className={cn('mt-4 w-full rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink', !ready && 'opacity-40')}
           >
             Pay with USDC
           </button>
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             Bitrefill prices this in USDC and delivers it. Because they don't take {ACTIVE_CHAIN.name} yet, Vlora pays them on{' '}
             {BRIDGE_CHAIN_LABEL} for you — one signature here, no second wallet. Check the number before you pay: a top-up can't be undone.
           </p>
         </>
       )}
-    </section>
+    </Card>
   );
 }

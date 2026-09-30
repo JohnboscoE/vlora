@@ -78,10 +78,10 @@ export function ComingSoon() {
 
       <ul className="space-y-2">
         {PLANNED.map((item) => (
-          <li key={item.name} className="rounded-2xl border border-line/10 bg-surface/70 p-3">
+          <li key={item.name} className="rounded-card-sm border border-line/10 bg-surface/70 p-3">
             <p className="text-xs font-semibold text-ink">{item.name}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{item.what}</p>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">{item.blockedBy}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">{item.what}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-subtle">{item.blockedBy}</p>
           </li>
         ))}
       </ul>

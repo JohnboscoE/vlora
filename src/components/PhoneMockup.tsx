@@ -26,12 +26,12 @@ export function PhoneMockup({ children, className }: { children: ReactNode; clas
           <div className="rounded-[2.7rem] bg-[#070c18] p-[9px]">
             <div className="relative aspect-[9/19.5] overflow-hidden rounded-[2.2rem] bg-gradient-to-b from-[#0d1a3a] via-[#091124] to-[#050b1a]">
               {/* Dynamic Island */}
-              <div className="absolute left-1/2 top-2 z-20 h-[24px] w-[84px] -translate-x-1/2 rounded-full bg-black">
-                <span className="absolute right-3 top-1/2 size-2 -translate-y-1/2 rounded-full bg-[#10182b]" />
+              <div className="absolute left-1/2 top-2 z-20 h-[24px] w-[84px] -translate-x-1/2 rounded-pill bg-black">
+                <span className="absolute right-3 top-1/2 size-2 -translate-y-1/2 rounded-pill bg-[#10182b]" />
               </div>
 
               {/* Status bar */}
-              <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-[9px] text-[10px] font-semibold text-white/85">
+              <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-[9px] text-micro font-semibold text-white/85">
                 <span>9:41</span>
                 <span className="flex items-center gap-[3px]" aria-hidden="true">
                   {[3, 5, 7, 9].map((h) => (
@@ -53,7 +53,7 @@ export function PhoneMockup({ children, className }: { children: ReactNode; clas
               />
 
               {/* Home indicator */}
-              <span className="absolute bottom-[7px] left-1/2 z-30 h-[4px] w-[100px] -translate-x-1/2 rounded-full bg-white/65" />
+              <span className="absolute bottom-[7px] left-1/2 z-30 h-[4px] w-[100px] -translate-x-1/2 rounded-pill bg-white/65" />
             </div>
           </div>
         </div>

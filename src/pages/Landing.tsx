@@ -141,7 +141,7 @@ function Nav() {
         </a>
         <a
           href={APP_HREF}
-          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          className="rounded-pill bg-white px-4 py-2 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
         >
           Launch app
         </a>
@@ -163,8 +163,8 @@ function Hero() {
 
       <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-5 pb-20 pt-10 md:grid-cols-[1.15fr_1fr] md:px-8 md:pb-28 md:pt-16">
         <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur">
-            <span className="size-1.5 rounded-full bg-[#7ef1b3]" />
+          <span className="inline-flex items-center gap-2 rounded-pill border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/85 backdrop-blur">
+            <span className="size-1.5 rounded-pill bg-[#7ef1b3]" />
             Intent-based payments · {ACTIVE_CHAIN.name}
           </span>
           <h1 className="display mt-6 text-5xl font-bold leading-[1.02] text-white md:text-7xl">
@@ -179,13 +179,13 @@ function Hero() {
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <a
               href={APP_HREF}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-pill bg-white px-6 py-3 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
             >
               Open the app <ArrowRight className="size-4" />
             </a>
             <a
               href="#how"
-              className="inline-flex items-center gap-2 rounded-full border border-white/25 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-pill border border-white/25 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
             >
               See how it works
             </a>
@@ -220,9 +220,9 @@ function HowItWorks() {
       <SectionHeading eyebrow="How it works" title="Three steps, and you stay in control." />
       <ol className="mt-12 grid gap-5 md:grid-cols-3">
         {STEPS.map(({ icon: Icon, title, body }, i) => (
-          <li key={title} className="rounded-3xl border border-line/10 bg-surface p-6 shadow-[0_2px_24px_rgba(18,45,69,0.05)]">
+          <li key={title} className="rounded-card border border-line/10 bg-surface p-6 shadow-[0_2px_24px_rgba(18,45,69,0.05)]">
             <div className="flex items-center justify-between">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-ink">
+              <div className="flex size-11 items-center justify-center rounded-card-sm bg-primary text-primary-ink">
                 <Icon className="size-5" />
               </div>
               <span className="display text-sm font-semibold text-subtle">0{i + 1}</span>
@@ -240,7 +240,7 @@ function BuiltWith() {
   return (
     <div className="border-b border-line/10 bg-surface py-4" aria-label="Built with">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-6 px-5 md:px-8">
-        <p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-subtle">Built with</p>
+        <p className="shrink-0 text-xs font-semibold uppercase tracking-[0.2em] text-subtle">Built with</p>
         <div className="relative min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)]">
           <div className="vlora-rail flex w-max items-center gap-8">
             {[...BUILT_WITH, ...BUILT_WITH].map((name, i) => (
@@ -249,7 +249,7 @@ function BuiltWith() {
                 aria-hidden={i >= BUILT_WITH.length}
                 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted"
               >
-                <span className="size-1.5 rounded-full bg-gradient-to-r from-brand to-brand-2" />
+                <span className="size-1.5 rounded-pill bg-gradient-to-r from-brand to-brand-2" />
                 {name}
               </span>
             ))}
@@ -279,16 +279,16 @@ function AgentSafety() {
             Read the threat model <ArrowUpRight className="size-4" />
           </a>
         </div>
-        <ol className="overflow-hidden rounded-3xl border border-line/10 bg-surface px-5 shadow-[0_2px_24px_rgba(18,45,69,0.05)] md:px-6">
+        <ol className="overflow-hidden rounded-card border border-line/10 bg-surface px-5 shadow-[0_2px_24px_rgba(18,45,69,0.05)] md:px-6">
           {AGENT_LAYERS.map(({ title, meta, body }, i) => (
             <li key={title} className="grid grid-cols-[32px_1fr] gap-4 border-b border-line/10 py-5 last:border-b-0">
-              <span className="display flex size-8 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-ink">
+              <span className="display flex size-8 items-center justify-center rounded-pill bg-primary text-xs font-semibold text-primary-ink">
                 0{i + 1}
               </span>
               <div>
                 <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                   <h3 className="display text-base font-semibold text-ink">{title}</h3>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand">{meta}</span>
+                  <span className="text-micro font-semibold uppercase tracking-[0.14em] text-brand">{meta}</span>
                 </div>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{body}</p>
               </div>
@@ -304,7 +304,7 @@ function Faq() {
   return (
     <section className="mx-auto w-full max-w-3xl px-5 pb-20 md:px-8 md:pb-28">
       <SectionHeading eyebrow="Questions" title="Before you connect a wallet." />
-      <div className="mt-10 divide-y divide-line/10 rounded-3xl border border-line/10 bg-surface">
+      <div className="mt-10 divide-y divide-line/10 rounded-card border border-line/10 bg-surface">
         {FAQ.map(({ q, a }) => (
           <details key={q} className="group px-6 py-5 [&_summary::-webkit-details-marker]:hidden">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-ink">
@@ -346,7 +346,7 @@ function Status() {
     <section className="mx-auto w-full max-w-6xl px-5 py-20 md:px-8 md:py-28">
       <SectionHeading eyebrow="Where it's at" title="What works today, and what's next." />
       <div className="mt-12 grid gap-5 md:grid-cols-2">
-        <div className="rounded-3xl border border-line/10 bg-surface p-7">
+        <div className="rounded-card border border-line/10 bg-surface p-7">
           <p className="display text-lg font-semibold text-ink">Available now</p>
           <ul className="mt-5 space-y-3">
             {TODAY.map((t) => (
@@ -356,7 +356,7 @@ function Status() {
             ))}
           </ul>
         </div>
-        <div className="rounded-3xl border border-dashed border-line/20 bg-surface/50 p-7">
+        <div className="rounded-card border border-dashed border-line/20 bg-surface/50 p-7">
           <p className="display text-lg font-semibold text-ink">Coming next</p>
           <ul className="mt-5 space-y-3">
             {NEXT.map((t) => (
@@ -381,7 +381,7 @@ function FinalCta() {
         <p className="mt-4 max-w-lg text-white/75">Connect a wallet and make your first USDC payment on Arc in under a minute.</p>
         <a
           href={APP_HREF}
-          className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          className="mt-8 inline-flex items-center gap-2 rounded-pill bg-white px-7 py-3.5 text-sm font-semibold text-[#0b1830] transition-transform hover:scale-[1.03] active:scale-[0.98]"
         >
           Launch app <ArrowUpRight className="size-4" />
         </a>

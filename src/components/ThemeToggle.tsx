@@ -14,7 +14,7 @@ export function ThemeToggle({ variant = 'default', className }: { variant?: 'def
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Light mode' : 'Dark mode'}
       className={cn(
-        'relative flex size-10 items-center justify-center overflow-hidden rounded-full transition-colors',
+        'relative flex size-10 items-center justify-center overflow-hidden rounded-pill transition-colors',
         variant === 'overlay'
           ? 'border border-white/20 bg-white/10 text-white hover:bg-white/20'
           : 'border border-line/15 bg-surface text-ink hover:bg-surface-2',

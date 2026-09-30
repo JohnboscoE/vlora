@@ -82,6 +82,9 @@ function env(name) {
 function str(v) {
   return typeof v === "string" ? v : "";
 }
+function scalar(v) {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : "";
+}
 var json = (status, body) => Response.json(body, { status });
 function maxUsdc() {
   const configured = Number(env("BILLS_MAX_USDC"));
@@ -137,7 +140,7 @@ function toProduct(raw) {
     type: str(p?.type),
     packages: packages.map((pkg) => {
       const o = pkg;
-      return { id: str(o.id) || str(o.package_id), value: String(o.value ?? ""), price: typeof o.price === "number" ? o.price : void 0 };
+      return { id: str(o.id) || str(o.package_id), value: scalar(o.value), price: typeof o.price === "number" ? o.price : void 0 };
     }).filter((pkg) => pkg.id !== ""),
     ...range && typeof range.min === "number" && typeof range.max === "number" ? {
       range: {
@@ -196,7 +199,7 @@ function invoiceProblem(payload) {
   };
 }
 function interpretPrice(raw) {
-  const text = String(raw ?? "").trim();
+  const text = scalar(raw).trim();
   if (!/^\d+(\.\d+)?$/.test(text)) return null;
   const value = Number(text);
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -234,7 +237,7 @@ function paymentProblem(invoice, max = maxUsdc()) {
   const payment = data?.payment;
   const address = str(payment?.address);
   const currency = str(payment?.currency).toUpperCase();
-  const quoted = `${str(payment?.price) || String(payment?.price ?? "?")} ${currency || "(no currency)"} by ${str(payment?.method) || "unknown method"}`;
+  const quoted = `${str(payment?.price) || scalar(payment?.price) || "?"} ${currency || "(no currency)"} by ${str(payment?.method) || "unknown method"}`;
   if (!id) return { problem: "the invoice has no id" };
   if (!isAddress(address)) return { problem: "the payment address is not an address" };
   const read = interpretPrice(payment?.price);

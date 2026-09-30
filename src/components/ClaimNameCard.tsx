@@ -70,7 +70,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-brand/20 bg-brand/5 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <AtSign className="size-4 text-brand" /> Claim your .arc name
@@ -81,7 +81,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
   }
 
   return (
-    <section className="rounded-3xl border border-brand/20 bg-gradient-to-br from-brand/10 via-surface/80 to-surface/80 p-5 backdrop-blur">
+    <section className="rounded-card border border-brand/20 bg-gradient-to-br from-brand/10 via-surface/80 to-surface/80 p-5 backdrop-blur">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -103,7 +103,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
           if (status === 'available') onClaim(label, years);
         }}
       >
-        <div className="flex items-center rounded-xl border border-line/15 bg-surface pr-3 focus-within:border-brand/50">
+        <div className="flex items-center rounded-control border border-line/15 bg-surface pr-3 focus-within:border-brand/50">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -147,7 +147,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
             value={years}
             onChange={(e) => setYears(Number(e.target.value))}
             aria-label="Years"
-            className="rounded-xl border border-line/15 bg-surface px-2.5 text-sm text-ink outline-none focus:border-brand/50"
+            className="rounded-control border border-line/15 bg-surface px-2.5 text-sm text-ink outline-none focus:border-brand/50"
           >
             {Array.from({ length: ARC_NAME_MAX_YEARS }, (_, i) => i + 1).map((y) => (
               <option key={y} value={y}>
@@ -158,7 +158,7 @@ export function ClaimNameCard({ onClaim, collapsible = false }: ClaimNameCardPro
           <button
             type="submit"
             disabled={status !== 'available'}
-            className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100"
+            className="flex-1 rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.02] disabled:opacity-40 disabled:hover:scale-100"
           >
             Claim
           </button>

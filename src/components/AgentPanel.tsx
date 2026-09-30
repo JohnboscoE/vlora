@@ -19,6 +19,7 @@ import {
 import { getAgentInfo } from '@/lib/agentApi';
 import { watchTx } from '@/lib/watchTx';
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui';
 
 export interface AgentVaultState {
   vault: `0x${string}`;
@@ -163,7 +164,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <Bot className="size-4 text-brand" /> Agent wallet {vault ? (active ? '· active' : '· off') : ''}
@@ -178,7 +179,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
           <Bot className="size-4 text-brand" /> Agent wallet
-          <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">
+          <span className="rounded-pill bg-brand/10 px-1.5 py-0.5 text-micro font-semibold uppercase tracking-wide text-brand">
             {ACTIVE_CHAIN.isTestnet ? 'Testnet beta' : 'Beta'}
           </span>
         </h2>
@@ -199,7 +200,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
     const overCap = BETA_MAX_PER_DAY != null && Number(perDay) > BETA_MAX_PER_DAY;
     const canCreate = !!agentAddress && !!address && Number(perTx) > 0 && Number(perDay) >= Number(perTx) && !overCap;
     return (
-      <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+      <Card>
         {header}
         {creatingNew && (currentVault ?? latestLegacy) && (
           <button
@@ -211,7 +212,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
           </button>
         )}
         {agentAddress === null && (
-          <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+          <p className="mt-3 rounded-control bg-danger/10 px-3 py-2 text-xs text-danger">
             The agent server isn't reachable. Locally, start it with <span className="mono">npm run agent</span>; on Vercel, set
             its environment variables (see README).
           </p>
@@ -223,7 +224,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
               value={perTx}
               onChange={(e) => setPerTx(e.target.value.replace(/[^\d.]/g, ''))}
               inputMode="decimal"
-              className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+              className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
             />
           </label>
           <label className="text-xs text-muted">
@@ -232,14 +233,14 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
               value={perDay}
               onChange={(e) => setPerDay(e.target.value.replace(/[^\d.]/g, ''))}
               inputMode="decimal"
-              className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+              className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
             />
           </label>
         </div>
-        <p className="mt-1.5 text-[11px] text-subtle">Applies to each token ({tokens.map((t) => t.symbol).join(', ')}), in whole tokens.</p>
-        {overCap && <p className="mt-1.5 text-[11px] text-danger">Beta cap: at most {BETA_MAX_PER_DAY} per day.</p>}
+        <p className="mt-1.5 text-xs text-subtle">Applies to each token ({tokens.map((t) => t.symbol).join(', ')}), in whole tokens.</p>
+        {overCap && <p className="mt-1.5 text-xs text-danger">Beta cap: at most {BETA_MAX_PER_DAY} per day.</p>}
         {BETA_MAX_PER_DAY != null && (
-          <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-[11px] leading-relaxed text-danger">
+          <p className="mt-3 rounded-control bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
             Beta, real money. The vault contract is unaudited and the agent key is run by this site's server. Your limits cap the
             loss at one day's allowance (max {BETA_MAX_PER_DAY}), but only fund what you'd be fine losing.
           </p>
@@ -249,7 +250,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+            className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
           >
             {[1, 7, 30].map((d) => (
               <option key={d} value={d}>
@@ -277,11 +278,11 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
               }),
             )
           }
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink disabled:opacity-40"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink disabled:opacity-40"
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : null} Create agent wallet
         </button>
-      </section>
+      </Card>
     );
   }
 
@@ -290,7 +291,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
   const fundTokenInfo = tokens.find((t) => t.symbol === fundToken);
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       {header}
       <div className="mt-4 flex items-center justify-between">
         <span className="mono text-xs text-subtle">
@@ -298,7 +299,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
         </span>
         <span
           className={cn(
-            'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+            'rounded-pill px-2 py-0.5 text-xs font-semibold',
             status === 'Active' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger',
           )}
         >
@@ -319,13 +320,13 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
         ))}
       </ul>
       {expiresAt > 0 && !revoked && (
-        <p className="mt-2 text-[11px] text-subtle">
+        <p className="mt-2 text-xs text-subtle">
           Agent access {expired ? 'expired' : 'until'} {new Date(expiresAt * 1000).toLocaleDateString()}
         </p>
       )}
 
       {legacyVault && (
-        <div className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
+        <div className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
           This agent wallet uses the first contract version, whose daily limit resets at midnight on-chain (the agent server still
           holds it to a rolling 24 hours). For the on-chain rolling limit: <strong>Withdraw all</strong>, <strong>Revoke</strong>, then{' '}
           {getAgentFactory(ACTIVE_CHAIN_ID) ? (
@@ -339,24 +340,24 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
         </div>
       )}
       {agentAddress === null && (
-        <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+        <p className="mt-3 rounded-control bg-danger/10 px-3 py-2 text-xs text-danger">
           The agent server isn't reachable, so the agent can't act and Extend / Re-enable are unavailable. Locally, run{' '}
           <span className="mono">npm run agent</span>; on Vercel, deploy the agent functions and set their environment variables (see README).
         </p>
       )}
       {agentAddress && currentAgent && !revoked && currentAgent.toLowerCase() !== agentAddress.toLowerCase() && (
-        <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+        <p className="mt-3 rounded-control bg-danger/10 px-3 py-2 text-xs text-danger">
           This wallet trusts a different agent key than the server is using. Click <strong>Extend {DEFAULT_EXPIRY_DAYS}d</strong> to point it at
           the server's current agent.
         </p>
       )}
       {revoked && agentAddress && (
-        <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
+        <p className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-xs text-muted">
           The agent is revoked — it can't act. Click <strong>Re-enable</strong> to trust the server's agent again for {DEFAULT_EXPIRY_DAYS} days.
         </p>
       )}
       {!legacyVault && (
-        <p className="mt-3 text-[11px] text-subtle">
+        <p className="mt-3 text-xs text-subtle">
           Want different limits?{' '}
           <button type="button" onClick={() => setCreatingNew(true)} className="font-semibold text-brand underline">
             Create another agent wallet
@@ -373,13 +374,13 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
           placeholder="Amount"
           inputMode="decimal"
           aria-label="Amount to add"
-          className="min-w-0 flex-1 rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+          className="min-w-0 flex-1 rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
         />
         <select
           value={fundToken}
           onChange={(e) => setFundToken(e.target.value as typeof fundToken)}
           aria-label="Token"
-          className="rounded-xl border border-line/15 bg-surface px-2 text-sm text-ink outline-none"
+          className="rounded-control border border-line/15 bg-surface px-2 text-sm text-ink outline-none"
         >
           {tokens.map((t) => (
             <option key={t.symbol}>{t.symbol}</option>
@@ -398,7 +399,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
               }),
             ).then(() => setFundAmount(''))
           }
-          className="rounded-xl bg-primary px-3 text-sm font-semibold text-primary-ink disabled:opacity-40"
+          className="rounded-control bg-primary px-3 text-sm font-semibold text-primary-ink disabled:opacity-40"
         >
           Add
         </button>
@@ -414,7 +415,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
                 writeContractAsync({ address: vault, abi: agentVaultAbi, functionName: 'setPaused', args: [!paused], chainId: ACTIVE_CHAIN_ID }),
               )
             }
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
+            className="flex items-center justify-center gap-1.5 rounded-control border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
           >
             {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />} {paused ? 'Resume' : 'Pause'}
           </button>
@@ -434,7 +435,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
                 }),
               )
             }
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
+            className="flex items-center justify-center gap-1.5 rounded-control border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
           >
             <TimerReset className="size-3.5" /> {revoked ? 'Re-enable' : `Extend ${DEFAULT_EXPIRY_DAYS}d`}
           </button>
@@ -453,7 +454,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
               }
             })()
           }
-          className="rounded-xl border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
+          className="rounded-control border border-line/15 py-2 font-medium text-ink hover:bg-surface-2 disabled:opacity-40"
         >
           Withdraw all
         </button>
@@ -465,7 +466,7 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
                 writeContractAsync({ address: vault, abi: agentVaultAbi, functionName: 'revokeAgent', chainId: ACTIVE_CHAIN_ID }),
               )
             }
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-danger/30 py-2 font-medium text-danger hover:bg-danger/10 disabled:opacity-40"
+            className="flex items-center justify-center gap-1.5 rounded-control border border-danger/30 py-2 font-medium text-danger hover:bg-danger/10 disabled:opacity-40"
           >
             <ShieldOff className="size-3.5" /> Revoke
           </button>
@@ -476,10 +477,10 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
           <Loader2 className="size-3 animate-spin" /> {busy}… confirm in your wallet
         </p>
       )}
-      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
+      <p className="mt-3 text-xs leading-relaxed text-subtle">
         Only the balance you add here is at risk, and at most the daily limit per token. Runs on {ACTIVE_CHAIN.name}
         {ACTIVE_CHAIN.isTestnet ? '.' : ' — real funds: start with small limits.'}
       </p>
-    </section>
+    </Card>
   );
 }

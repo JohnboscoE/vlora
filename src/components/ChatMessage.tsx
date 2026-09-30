@@ -82,7 +82,7 @@ function CopyButton({ text }: { text: string }) {
           },
         );
       }}
-      className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-ink transition-transform hover:scale-[1.02]"
+      className="mt-2.5 inline-flex items-center gap-1.5 rounded-control bg-primary px-3 py-1.5 text-xs font-semibold text-primary-ink transition-transform hover:scale-[1.02]"
     >
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       {copied ? 'Copied' : 'Copy link'}
@@ -115,7 +115,7 @@ export function ChatMessage({ msg }: { msg: ChatMessageData }) {
       <div className={cn('flex max-w-[85%] flex-col gap-1 md:max-w-[75%]', isUser ? 'items-end' : 'items-start')}>
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+            'rounded-card-sm px-4 py-3 text-sm leading-relaxed',
             isUser && 'rounded-br-md bg-brand text-white',
             !isUser && msg.status === 'success' && 'rounded-bl-md border border-success/25 bg-success/10 text-ink',
             !isUser && msg.status === 'error' && 'rounded-bl-md border border-danger/25 bg-danger/10 text-ink',
@@ -136,7 +136,7 @@ export function ChatMessage({ msg }: { msg: ChatMessageData }) {
               href={msg.explorerUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-surface px-2.5 py-1.5 text-xs font-medium text-brand ring-1 ring-line/10 transition-colors hover:bg-surface-2"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-control bg-surface px-2.5 py-1.5 text-xs font-medium text-brand ring-1 ring-line/10 transition-colors hover:bg-surface-2"
             >
               <span className="mono">{`${msg.txHash.slice(0, 10)}…${msg.txHash.slice(-6)}`}</span>
               View on explorer
@@ -145,7 +145,7 @@ export function ChatMessage({ msg }: { msg: ChatMessageData }) {
           )}
         </div>
 
-        <span className="px-1 text-[10px] tabular-nums text-subtle">{time}</span>
+        <span className="px-1 text-micro tabular-nums text-subtle">{time}</span>
       </div>
     </motion.div>
   );
@@ -164,11 +164,11 @@ export function TypingBubble() {
       aria-label="Vlora is typing"
     >
       <LogoMark className="mt-0.5 size-8" />
-      <div className="flex h-11 items-center gap-1.5 rounded-2xl rounded-bl-md border border-line/10 bg-surface-2 px-4">
+      <div className="flex h-11 items-center gap-1.5 rounded-card-sm rounded-bl-md border border-line/10 bg-surface-2 px-4">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="size-2 rounded-full bg-muted"
+            className="size-2 rounded-pill bg-muted"
             animate={{ y: [0, -5, 0], opacity: [0.45, 1, 0.45] }}
             transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
           />

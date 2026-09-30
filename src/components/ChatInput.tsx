@@ -124,7 +124,7 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
         <ul
           role="listbox"
           aria-label="Quick actions"
-          className="absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-2xl border border-line/15 bg-surface p-1.5 shadow-xl"
+          className="absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-card-sm border border-line/15 bg-surface p-1.5 shadow-xl"
         >
           {matches.map((cmd, i) => {
             const Icon = cmd.icon;
@@ -136,17 +136,17 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
                   onMouseDown={(e) => e.preventDefault()} // keep focus in the textarea
                   onClick={() => runCommand(cmd)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors',
+                    'flex w-full items-center gap-3 rounded-control px-3 py-2 text-left transition-colors',
                     i === active ? 'bg-surface-2' : 'hover:bg-surface-2',
                   )}
                 >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-brand/10 text-brand">
                     <Icon className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium text-ink">
                       {cmd.label}
-                      <span className="mono text-[11px] text-subtle">/{cmd.id}</span>
+                      <span className="mono text-xs text-subtle">/{cmd.id}</span>
                     </span>
                     <span className="block truncate text-xs text-muted">{cmd.hint}</span>
                   </span>
@@ -154,18 +154,18 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
               </li>
             );
           })}
-          <li className="px-3 pb-1 pt-1.5 text-[10px] text-subtle">↑↓ to move · Enter to pick · Esc to close</li>
+          <li className="px-3 pb-1 pt-1.5 text-micro text-subtle">↑↓ to move · Enter to pick · Esc to close</li>
         </ul>
       )}
 
-      <div className="flex items-end gap-2 rounded-2xl border border-line/15 bg-surface py-2 pl-2 pr-2 shadow-sm transition-shadow focus-within:border-brand/50 focus-within:ring-4 focus-within:ring-brand/10">
+      <div className="flex items-end gap-2 rounded-card-sm border border-line/15 bg-surface py-2 pl-2 pr-2 shadow-sm transition-shadow focus-within:border-brand/50 focus-within:ring-4 focus-within:ring-brand/10">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={disabled}
           aria-label="Import a CSV of payments"
           title="Import a CSV of payments (address, amount)"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+          className="flex size-9 shrink-0 items-center justify-center rounded-control text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
         >
           <Paperclip className="size-4" />
         </button>
@@ -195,7 +195,7 @@ export function ChatInput({ value, onChange, onSubmit, onImportCsv, commands, di
         <button
           onClick={handleSubmit}
           disabled={!value.trim() || disabled}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-ink transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-30"
+          className="flex size-9 shrink-0 items-center justify-center rounded-control bg-primary text-primary-ink transition-all hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-30"
           aria-label="Send"
         >
           <ArrowUp className="size-4" strokeWidth={2.5} />

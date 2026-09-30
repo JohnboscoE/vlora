@@ -83,6 +83,7 @@ import { describeWalletError } from './lib/walletError';
 import { batchSenderAbi, getBatchSenderAddress } from './batch-config';
 import { ACTIVE_CHAIN_ID, ACTIVE_CHAIN } from './chain-env';
 import { config } from './config';
+import { Card, CardTitle } from '@/components/ui';
 
 // Minimum time the typing bubble shows before a reply
 /** Left behind on a sweep so the sweep itself can pay Arc's fees, in USDC */
@@ -1860,8 +1861,8 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
     <div className="relative flex h-dvh flex-col overflow-clip bg-bg text-ink">
       {/* Ambient brand glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-32 -top-40 size-[520px] rounded-full bg-brand/15 blur-[120px] dark:bg-brand/20" />
-        <div className="absolute -bottom-48 -right-24 size-[480px] rounded-full bg-brand-2/10 blur-[120px] dark:bg-brand-2/10" />
+        <div className="absolute -left-32 -top-40 size-[520px] rounded-pill bg-brand/15 blur-[120px] dark:bg-brand/20" />
+        <div className="absolute -bottom-48 -right-24 size-[480px] rounded-pill bg-brand-2/10 blur-[120px] dark:bg-brand-2/10" />
       </div>
 
       {/* Top bar */}
@@ -1875,13 +1876,13 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
             {wrongChain ? (
               <button
                 onClick={handleSwitchChain}
-                className="hidden items-center gap-1.5 rounded-full bg-danger/10 px-3 py-2 text-xs font-semibold text-danger sm:flex"
+                className="hidden items-center gap-1.5 rounded-pill bg-danger/10 px-3 py-2 text-xs font-semibold text-danger sm:flex"
               >
-                <span className="size-1.5 rounded-full bg-danger" /> Switch to {ACTIVE_CHAIN.name}
+                <span className="size-1.5 rounded-pill bg-danger" /> Switch to {ACTIVE_CHAIN.name}
               </button>
             ) : (
-              <span className="hidden items-center gap-1.5 rounded-full border border-line/10 bg-surface px-3 py-2 text-xs font-medium text-muted sm:flex">
-                <span className="size-1.5 rounded-full bg-success" /> {ACTIVE_CHAIN.name}
+              <span className="hidden items-center gap-1.5 rounded-pill border border-line/10 bg-surface px-3 py-2 text-xs font-medium text-muted sm:flex">
+                <span className="size-1.5 rounded-pill bg-success" /> {ACTIVE_CHAIN.name}
               </span>
             )}
             <ThemeToggle />
@@ -1905,16 +1906,16 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
 
 
 
-            <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Try saying</h2>
+            <Card>
+              <CardTitle>Try saying</CardTitle>
               <ul className="mt-3 space-y-1.5">
                 {EXAMPLES.map(({ label, prompt, icon: Icon }) => (
                   <li key={label}>
                     <button
                       onClick={() => setDraft(prompt)}
-                      className="group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                      className="group flex w-full items-center gap-3 rounded-card-sm px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
                     >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-brand/10 text-brand">
                         <Icon className="size-4" />
                       </span>
                       <span className="min-w-0">
@@ -1925,10 +1926,10 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   </li>
                 ))}
               </ul>
-            </section>
+            </Card>
 
-            <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Contacts</h2>
+            <Card>
+              <CardTitle>Contacts</CardTitle>
               {contacts.length === 0 ? (
                 <p className="mt-3 text-xs leading-relaxed text-muted">
                   Say <span className="mono text-ink-2">save 0x… as alice</span>, then pay by name.
@@ -1940,7 +1941,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                       <button
                         onClick={() => setDraft(`Send 1 USDC to ${c.name}`)}
                         title={`Pay ${c.name}`}
-                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
                       >
                         <span className="truncate text-sm font-medium text-ink">{c.name}</span>
                         <span className="mono shrink-0 text-xs text-subtle">{shortAddr(c.address)}</span>
@@ -1948,7 +1949,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                       <button
                         onClick={() => removeContact(c.name)}
                         aria-label={`Remove ${c.name}`}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover:opacity-100"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-control text-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover:opacity-100"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -1956,18 +1957,18 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   ))}
                 </ul>
               )}
-            </section>
+            </Card>
 
             {batches.length > 0 && (
-              <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Saved batches</h2>
+              <Card>
+                <CardTitle>Saved batches</CardTitle>
                 <ul className="mt-2 space-y-0.5">
                   {batches.map((b) => (
                     <li key={b.name} className="group flex items-center gap-1">
                       <button
                         onClick={() => setDraft(batchToCommand(b, contacts))}
                         title="Load into the composer"
-                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-control px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
                       >
                         <span className="truncate text-sm font-medium text-ink">{b.name}</span>
                         <span className="shrink-0 text-xs text-subtle">{b.items.length} people</span>
@@ -1975,18 +1976,18 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                       <button
                         onClick={() => removeBatch(b.name)}
                         aria-label={`Delete ${b.name}`}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover:opacity-100"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-control text-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover:opacity-100"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
                     </li>
                   ))}
                 </ul>
-              </section>
+              </Card>
             )}
 
-            <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-subtle">What works today</h2>
+            <Card>
+              <CardTitle>What works today</CardTitle>
               <ul className="mt-3 space-y-2.5">
                 {CAPABILITIES.map(({ label, live }) => (
                   <li key={label} className="flex items-center justify-between text-sm">
@@ -1994,8 +1995,8 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                     <span
                       className={
                         live
-                          ? 'rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success'
-                          : 'rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-subtle'
+                          ? 'rounded-pill bg-success/10 px-2 py-0.5 text-xs font-semibold text-success'
+                          : 'rounded-pill bg-surface-2 px-2 py-0.5 text-xs font-medium text-subtle'
                       }
                     >
                       {live ? 'Live' : 'Preview'}
@@ -2003,12 +2004,12 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   </li>
                 ))}
               </ul>
-            </section>
+            </Card>
           </aside>
         )}
 
         {/* Chat panel */}
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-line/10 bg-surface/80 shadow-[0_8px_40px_rgba(6,11,24,0.06)] backdrop-blur-xl">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-line/10 bg-surface/80 shadow-[0_8px_40px_rgba(6,11,24,0.06)] backdrop-blur-xl">
           {!isDesktop && (
             <div className="p-3 pb-0">
               <BalanceCard compact arcName={myArcName} />
@@ -2027,7 +2028,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
 
           <div className={tab === 'chat' ? 'hidden' : 'min-h-0 flex-1 overflow-y-auto p-3 md:p-4'}>
               {!isConnected && tab !== 'next' ? (
-                <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">Connect your wallet or sign in to use this.</p>
+                <p className="rounded-card-sm bg-surface-2 px-3 py-2.5 text-xs text-muted">Connect your wallet or sign in to use this.</p>
               ) : (
                 <>
                   {tab === 'bills' && <BillsPanel category={billsCategory} />}
@@ -2046,7 +2047,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                     </div>
                   )}
                   {tab === 'wallet' && wrongChain && (
-                    <p className="rounded-2xl bg-surface-2 px-3 py-2.5 text-xs text-muted">
+                    <p className="rounded-card-sm bg-surface-2 px-3 py-2.5 text-xs text-muted">
                       Switch your wallet to {ACTIVE_CHAIN.name} to manage the agent wallet.
                     </p>
                   )}
@@ -2088,13 +2089,13 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   role="switch"
                   aria-checked={agentMode}
                   onClick={() => setAgentMode((m) => !m)}
-                  className={agentMode ? 'relative h-6 w-11 rounded-full bg-brand transition-colors' : 'relative h-6 w-11 rounded-full bg-line/20 transition-colors'}
+                  className={agentMode ? 'relative h-6 w-11 rounded-pill bg-brand transition-colors' : 'relative h-6 w-11 rounded-pill bg-line/20 transition-colors'}
                 >
                   <span
                     className={
                       agentMode
-                        ? 'absolute left-0.5 top-0.5 size-5 translate-x-5 rounded-full bg-white shadow transition-transform'
-                        : 'absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform'
+                        ? 'absolute left-0.5 top-0.5 size-5 translate-x-5 rounded-pill bg-white shadow transition-transform'
+                        : 'absolute left-0.5 top-0.5 size-5 rounded-pill bg-white shadow transition-transform'
                     }
                   />
                 </button>
@@ -2121,7 +2122,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   <button
                     key={label}
                     onClick={() => setDraft(prompt)}
-                    className="shrink-0 rounded-full border border-line/15 bg-surface px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-surface-2"
+                    className="shrink-0 rounded-pill border border-line/15 bg-surface px-3 py-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-surface-2"
                   >
                     {label}
                   </button>
@@ -2138,7 +2139,7 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
               disabled={isPending || isConfirming}
               placeholder={agentMode ? 'Tell your agent what to do, e.g. "pay 5 USDC to james.arc"' : 'Try "send 5 USDC to alice", or type / for quick actions'}
             />
-            <p className="mt-2 text-center text-[11px] text-subtle">
+            <p className="mt-2 text-center text-xs text-subtle">
               Type / for quick actions · Gas paid in USDC · {ACTIVE_CHAIN.name}
             </p>
           </div>

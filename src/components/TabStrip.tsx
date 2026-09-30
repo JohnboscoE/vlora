@@ -41,7 +41,7 @@ export function TabStrip({ tabs, active, onSelect }: TabStripProps) {
             aria-selected={selected}
             onClick={() => onSelect(tab.id)}
             className={cn(
-              'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
+              'flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold transition-colors',
               selected ? 'bg-brand/10 text-brand' : 'text-muted hover:bg-surface-2 hover:text-ink',
             )}
           >

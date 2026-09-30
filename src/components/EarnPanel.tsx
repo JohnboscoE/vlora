@@ -8,6 +8,7 @@ import { depositToVault, exploreVaults, getPosition, withdrawFromVault, type Ear
 import { recordActivity } from '@/lib/activity';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
+import { Card, EmptyState, SkeletonRows } from '@/components/ui';
 
 interface EarnPanelProps {
   collapsible?: boolean;
@@ -108,7 +109,7 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <PiggyBank className="size-4 text-brand" /> Earn
@@ -120,12 +121,12 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
   }
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <PiggyBank className="size-4 text-brand" /> Earn
-            <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">Beta</span>
+            <span className="rounded-pill bg-brand/10 px-1.5 py-0.5 text-micro font-semibold uppercase tracking-wide text-brand">Beta</span>
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Put idle USDC into a lending vault on {ACTIVE_CHAIN.name}. The vault holds it, not Vlora, and you can withdraw any time.
@@ -139,15 +140,13 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
       </div>
 
       {failed ? (
-        <p className="mt-4 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+        <p className="mt-4 rounded-control bg-danger/10 px-3 py-2 text-xs text-danger">
           Couldn't load vaults right now. If you use an ad or privacy blocker, allow this site's requests and try again.
         </p>
       ) : vaults == null ? (
-        <p className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <Loader2 className="size-3.5 animate-spin" /> Finding vaults…
-        </p>
+        <SkeletonRows rows={2} className="mt-4" />
       ) : vaults.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">No vaults are available on {ACTIVE_CHAIN.name} yet.</p>
+        <EmptyState icon={PiggyBank} title="No vaults here yet" body={`Arc lending vaults aren't available on ${ACTIVE_CHAIN.name} right now. Nothing to do until one appears.`} />
       ) : (
         <>
           <label className="mt-4 block text-xs text-muted">
@@ -155,7 +154,7 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
             <select
               value={selected ?? ''}
               onChange={(e) => setSelected(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+              className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
             >
               {vaults.map((v) => (
                 <option key={v.address} value={v.address}>
@@ -187,12 +186,12 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
                   </dd>
                 </div>
               )}
-              {vault.lowLiquidity && <p className="pt-1 text-[11px] text-danger">This vault is low on liquidity — withdrawals may be delayed.</p>}
+              {vault.lowLiquidity && <p className="pt-1 text-xs text-danger">This vault is low on liquidity — withdrawals may be delayed.</p>}
             </dl>
           )}
 
           {!isConnected || !address ? (
-            <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to deposit.</p>
+            <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to deposit.</p>
           ) : (
             <>
               <input
@@ -201,14 +200,14 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
                 inputMode="decimal"
                 placeholder={`Amount in ${vault?.asset ?? 'USDC'}`}
                 aria-label="Amount"
-                className="mt-4 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+                className="mt-4 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
               />
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => void run('deposit')}
                   disabled={busy != null || !amount}
                   className={cn(
-                    'flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-ink',
+                    'flex items-center justify-center gap-2 rounded-control bg-primary py-2.5 text-xs font-semibold text-primary-ink',
                     (busy != null || !amount) && 'opacity-40',
                   )}
                 >
@@ -218,14 +217,14 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
                   onClick={() => void run('withdraw')}
                   disabled={busy != null || !amount || !position}
                   className={cn(
-                    'flex items-center justify-center gap-2 rounded-xl border border-line/15 text-xs font-semibold text-ink',
+                    'flex items-center justify-center gap-2 rounded-control border border-line/15 text-xs font-semibold text-ink',
                     (busy != null || !amount || !position) && 'opacity-40',
                   )}
                 >
                   {busy === 'withdraw' && <Loader2 className="size-3.5 animate-spin" />} Withdraw
                 </button>
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+              <p className="mt-2 text-xs leading-relaxed text-subtle">
                 Rates vary and aren't guaranteed; a lending protocol holds the funds, so there's smart-contract risk. Your wallet signs
                 the approval and the deposit. Gas on Arc is paid in USDC.
               </p>
@@ -233,6 +232,6 @@ export function EarnPanel({ collapsible = false, open: openProp, onOpenChange }:
           )}
         </>
       )}
-    </section>
+    </Card>
   );
 }

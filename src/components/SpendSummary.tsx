@@ -34,13 +34,13 @@ export function SpendSummary() {
   const open = buckets.find((b) => b.at === selected) ?? null;
 
   if (entries.length === 0) {
-    return <p className="mt-2 text-[11px] text-muted">Nothing to chart yet — this fills in as you use Vlora.</p>;
+    return <p className="mt-2 text-xs text-muted">Nothing to chart yet — this fills in as you use Vlora.</p>;
   }
 
   return (
-    <div className="mt-3 rounded-2xl bg-surface/60 p-2.5">
+    <div className="mt-3 rounded-card-sm bg-surface/60 p-2.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted">
+        <p className="text-xs text-muted">
           <span className="font-semibold text-ink">{usdc(totals.out)} USDC</span> out
           {totals.in > 0 && <span> · {usdc(totals.in)} in</span>}
         </p>
@@ -53,7 +53,7 @@ export function SpendSummary() {
                 setSelected(null);
               }}
               className={cn(
-                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                'rounded-pill px-2 py-0.5 text-micro font-semibold',
                 grain === option.id ? 'bg-brand/10 text-brand' : 'text-muted',
               )}
             >
@@ -67,13 +67,13 @@ export function SpendSummary() {
 
       {open && (
         <div className="mt-1">
-          <p className="text-[11px] font-semibold text-ink">
+          <p className="text-xs font-semibold text-ink">
             {open.label} · {usdc(open.out)} USDC out
           </p>
           {open.byKind.length > 0 && (
             <ul className="mt-1 space-y-0.5">
               {open.byKind.map((row) => (
-                <li key={row.kind} className="flex justify-between gap-3 text-[11px]">
+                <li key={row.kind} className="flex justify-between gap-3 text-xs">
                   <span className="text-muted">{row.label}</span>
                   <span className="font-medium text-ink">{usdc(row.amount)}</span>
                 </li>
