@@ -69,7 +69,7 @@ export function SpendChart({ buckets, selected, onSelect }: SpendChartProps) {
               className="stroke-line/25"
               strokeWidth={1}
             />
-            <text x={PAD.left - 8} y={y(value) + 4} textAnchor="end" className="fill-subtle text-[11px]">
+            <text x={PAD.left - 8} y={y(value) + 4} textAnchor="end" className="fill-subtle text-xs">
               {usdc(value)}
             </text>
           </g>
@@ -82,7 +82,7 @@ export function SpendChart({ buckets, selected, onSelect }: SpendChartProps) {
         {last && (
           <>
             <circle cx={last.cx} cy={last.cy} r={4} className="fill-brand stroke-surface" strokeWidth={2} />
-            <text x={last.cx} y={last.cy - 10} textAnchor="end" className="fill-ink text-[11px] font-semibold">
+            <text x={last.cx} y={last.cy - 10} textAnchor="end" className="fill-ink text-xs font-semibold">
               {usdc(last.bucket.out)}
             </text>
           </>
@@ -121,7 +121,7 @@ export function SpendChart({ buckets, selected, onSelect }: SpendChartProps) {
                 x={p.cx}
                 y={HEIGHT - 8}
                 textAnchor={i === 0 ? 'start' : 'end'}
-                className="fill-subtle text-[11px]"
+                className="fill-subtle text-xs"
               >
                 {p.bucket.label}
               </text>

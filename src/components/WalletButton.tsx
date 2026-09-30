@@ -7,9 +7,9 @@ import { useAccount } from 'wagmi';
 import { PRIVY_APP_ID } from '@/config';
 
 const connected =
-  'flex h-10 items-center gap-2 rounded-full border border-line/15 bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-2';
+  'flex h-10 items-center gap-2 rounded-pill border border-line/15 bg-surface px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-2';
 const idle =
-  'flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.03] active:scale-[0.98]';
+  'flex h-10 items-center gap-2 rounded-pill bg-primary px-4 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.03] active:scale-[0.98]';
 
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
@@ -31,7 +31,7 @@ function AddressChip({ address, title }: { address: `0x${string}`; title?: strin
   };
   return (
     <button onClick={copy} className={connected} title={title ?? 'Copy your wallet address'} aria-label={`Copy wallet address ${address}`}>
-      <span className="size-2 rounded-full bg-success" />
+      <span className="size-2 rounded-pill bg-success" />
       <span className="mono text-xs">{short(address)}</span>
       {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5 text-muted" />}
     </button>
@@ -46,7 +46,7 @@ function InjectedWalletButton() {
         <button onClick={show} className={isConnected ? connected : idle}>
           {isConnected ? (
             <>
-              <span className="size-2 rounded-full bg-success" />
+              <span className="size-2 rounded-pill bg-success" />
               <span className="mono text-xs">{ensName ?? truncatedAddress}</span>
             </>
           ) : (
@@ -104,7 +104,7 @@ function PrivyWalletButton() {
         onClick={() => void logout()}
         aria-label="Sign out"
         title="Sign out"
-        className="flex size-10 items-center justify-center rounded-full border border-line/15 bg-surface text-muted transition-colors hover:text-ink"
+        className="flex size-10 items-center justify-center rounded-pill border border-line/15 bg-surface text-muted transition-colors hover:text-ink"
       >
         <LogOut className="size-4" />
       </button>

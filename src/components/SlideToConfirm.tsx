@@ -62,13 +62,13 @@ export function SlideToConfirm({ label, onConfirm, disabled }: { label: string; 
     <div
       ref={railRef}
       className={cn(
-        'relative mt-2 h-[52px] w-full select-none overflow-hidden rounded-2xl bg-primary',
+        'relative mt-2 h-[52px] w-full select-none overflow-hidden rounded-card-sm bg-primary',
         disabled && 'opacity-40',
       )}
     >
       {/* Filled track behind the thumb */}
       <div
-        className="absolute inset-y-0 left-0 rounded-2xl bg-gradient-to-r from-brand to-brand-2"
+        className="absolute inset-y-0 left-0 rounded-card-sm bg-gradient-to-r from-brand to-brand-2"
         style={{ width: x + THUMB + PAD * 2, opacity: 0.35 + progress * 0.65, transition: dragging ? 'none' : 'width 200ms, opacity 200ms' }}
       />
       <span
@@ -86,7 +86,7 @@ export function SlideToConfirm({ label, onConfirm, disabled }: { label: string; 
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onKeyDown={onKeyDown}
-        className="absolute top-1 flex touch-none items-center justify-center rounded-xl bg-surface text-ink shadow-md outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed"
+        className="absolute top-1 flex touch-none items-center justify-center rounded-control bg-surface text-ink shadow-md outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed"
         style={{
           left: PAD,
           width: THUMB,

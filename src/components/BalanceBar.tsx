@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { useTokenBalances } from '@/hooks/useTokenBalances';
 import { formatTokenAmount, getTokens } from '@/tokens';
 import { formatUnits } from 'viem';
+import { Eye, EyeOff } from 'lucide-react';
+import { HIDDEN, toggleBalancesHidden, useBalancesHidden } from '@/lib/privacy';
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -18,6 +20,7 @@ function shortAddr(addr: string) {
 export function BalanceCard({ compact = false, arcName = null }: { compact?: boolean; arcName?: string | null }) {
   const { address, chainId, isConnected } = useAccount();
   const usdcFact = getUsdc(ACTIVE_CHAIN_ID);
+  const hidden = useBalancesHidden();
 
   const { data: balance, isLoading, isError } = useReadContract({
     address: usdcFact?.address as `0x${string}`,
@@ -35,19 +38,30 @@ export function BalanceCard({ compact = false, arcName = null }: { compact?: boo
   const others = getTokens(ACTIVE_CHAIN_ID).filter((t) => t.symbol !== 'USDC');
 
   return (
-    <div className={cn('relative isolate overflow-hidden rounded-3xl bg-[#050b1a] text-white', compact ? 'p-4' : 'p-5')}>
+    <div className={cn('relative isolate overflow-hidden rounded-card bg-[#050b1a] text-white', compact ? 'p-4' : 'p-5')}>
       <ShaderBackground className="absolute inset-0 -z-20 opacity-80" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[#050b1a]/80 via-[#050b1a]/50 to-[#050b1a]/20" />
 
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-white/65">USDC balance</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.16em] text-white/65">
+          USDC balance
+          <button
+            onClick={toggleBalancesHidden}
+            aria-pressed={hidden}
+            title={hidden ? 'Show balances' : 'Hide balances'}
+            aria-label={hidden ? 'Show balances' : 'Hide balances'}
+            className="rounded-pill p-1 text-white/60 transition hover:bg-white/10 hover:text-white"
+          >
+            {hidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          </button>
+        </span>
         <span
           className={cn(
-            'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium backdrop-blur',
+            'flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium backdrop-blur',
             wrongChain ? 'bg-[#ff708e]/20 text-[#ffb3c3]' : 'bg-white/10 text-white/80',
           )}
         >
-          <span className={cn('size-1.5 rounded-full', wrongChain ? 'bg-[#ff708e]' : 'bg-[#7ef1b3]')} />
+          <span className={cn('size-1.5 rounded-pill', wrongChain ? 'bg-[#ff708e]' : 'bg-[#7ef1b3]')} />
           {wrongChain ? 'Wrong network' : ACTIVE_CHAIN.name}
         </span>
       </div>
@@ -55,7 +69,20 @@ export function BalanceCard({ compact = false, arcName = null }: { compact?: boo
       <div className={cn('flex items-end gap-2', compact ? 'mt-3' : 'mt-6')}>
         <TokenUSDC size={compact ? 22 : 28} variant="branded" className="mb-1" />
         <span className={cn('display font-bold tabular-nums leading-none', compact ? 'text-3xl' : 'text-4xl')}>
-          {!isConnected ? '—' : formatted != null ? formatted : isError ? '—' : isLoading ? '…' : '—'}
+          {hidden ? (
+            HIDDEN
+          ) : !isConnected ? (
+            '—'
+          ) : formatted != null ? (
+            formatted
+          ) : isError ? (
+            '—'
+          ) : isLoading ? (
+            // Shaped like the figure it becomes, so the card doesn't jump
+            <span className={cn('block animate-pulse rounded-control bg-white/15', compact ? 'h-7 w-24' : 'h-9 w-32')} />
+          ) : (
+            '—'
+          )}
         </span>
         <span className="mb-0.5 text-sm font-medium text-white/60">USDC</span>
       </div>
@@ -63,7 +90,7 @@ export function BalanceCard({ compact = false, arcName = null }: { compact?: boo
         <p className="mt-2 flex gap-3 text-xs text-white/70">
           {others.map((t) => (
             <span key={t.symbol} className="tabular-nums">
-              {balances[t.symbol] != null ? formatTokenAmount(Number(formatUnits(balances[t.symbol]!, t.decimals)), t.decimals) : '—'} {t.symbol}
+              {hidden ? HIDDEN : balances[t.symbol] != null ? formatTokenAmount(Number(formatUnits(balances[t.symbol]!, t.decimals)), t.decimals) : '—'} {t.symbol}
             </span>
           ))}
         </p>

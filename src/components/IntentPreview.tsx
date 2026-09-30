@@ -195,7 +195,7 @@ export function IntentPreview({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
-        className="relative flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-line/10 bg-surface shadow-2xl md:max-w-lg md:rounded-3xl"
+        className="relative flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-line/10 bg-surface shadow-2xl md:max-w-lg md:rounded-card"
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
@@ -205,7 +205,7 @@ export function IntentPreview({
 
         {/* Drag handle (mobile only) */}
         <div className="flex shrink-0 justify-center pt-3 md:hidden">
-          <div className="h-1 w-10 rounded-full bg-line/15" />
+          <div className="h-1 w-10 rounded-pill bg-line/15" />
         </div>
 
         <div className="overflow-y-auto px-5 pb-7 pt-4 md:px-7 md:pt-6">
@@ -222,14 +222,14 @@ export function IntentPreview({
               <button
                 onClick={onCancel}
                 aria-label="Close"
-                className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-muted transition-colors hover:text-ink"
+                className="flex size-8 items-center justify-center rounded-pill bg-surface-2 text-muted transition-colors hover:text-ink"
               >
                 <X className="size-4" />
               </button>
             )}
           </div>
 
-          <div className="mb-4 rounded-2xl border border-line/10 bg-surface-2/60 p-4">
+          <div className="mb-4 rounded-card-sm border border-line/10 bg-surface-2/60 p-4">
             {intent.type === 'batch' ? (
               <BatchRows intent={intent} contacts={contacts} arcLabels={arcLabels} onEdit={onEditIntent} editable={!busy} sim={sim} />
             ) : intent.type === 'arcname' ? (
@@ -272,7 +272,7 @@ export function IntentPreview({
           {wrongChain && !previewOnly ? (
             <button
               onClick={onSwitchChain}
-              className="mt-2 w-full rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99]"
+              className="mt-2 w-full rounded-card-sm bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99]"
             >
               Switch to {ACTIVE_CHAIN.name}
             </button>
@@ -283,7 +283,7 @@ export function IntentPreview({
             <button
               disabled={confirmDisabled}
               onClick={confirm}
-              className="mt-2 w-full rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+              className="mt-2 w-full rounded-card-sm bg-primary py-3.5 text-sm font-semibold text-primary-ink transition-transform hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {previewOnly ? (
                 'Got it'
@@ -419,9 +419,9 @@ function SaveTemplate({ onSave }: { onSave: (name: string) => void }) {
         maxLength={40}
         placeholder='Template name, e.g. "Team payroll"'
         aria-label="Template name"
-        className="flex-1 rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-subtle focus:border-brand/50"
+        className="flex-1 rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-subtle focus:border-brand/50"
       />
-      <button type="submit" className="rounded-xl bg-surface-2 px-3 text-sm font-semibold text-ink hover:bg-line/10">
+      <button type="submit" className="rounded-control bg-surface-2 px-3 text-sm font-semibold text-ink hover:bg-line/10">
         Save
       </button>
     </form>
@@ -442,7 +442,7 @@ function Notice({
   return (
     <div
       className={cn(
-        'mb-3 flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs',
+        'mb-3 flex items-start gap-2 rounded-control px-3 py-2.5 text-xs',
         tone === 'danger' && 'bg-danger/10 text-danger',
         tone === 'neutral' && 'bg-surface-2 text-muted',
         tone === 'success' && 'bg-success/10 text-success',
@@ -457,7 +457,7 @@ function Notice({
 function Row({ label, children, mono = false }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-[11px] font-medium uppercase tracking-widest text-subtle">{label}</span>
+      <span className="text-xs font-medium uppercase tracking-widest text-subtle">{label}</span>
       <span className={cn('flex items-center gap-1.5 text-sm font-semibold tabular-nums text-ink', mono && 'mono')}>
         {children}
       </span>
@@ -468,7 +468,7 @@ function Row({ label, children, mono = false }: { label: string; children: React
 function RowsHeader({ icon: Icon, title }: { icon: typeof ArrowRight; title: string }) {
   return (
     <div className="flex items-center gap-2.5 pb-1">
-      <div className="flex size-9 items-center justify-center rounded-xl bg-brand/10 text-brand">
+      <div className="flex size-9 items-center justify-center rounded-control bg-brand/10 text-brand">
         <Icon className="size-4" />
       </div>
       <span className="text-sm font-semibold text-ink">{title}</span>
@@ -516,7 +516,7 @@ function BatchRows({
       <RowsHeader icon={Users} title={`Batch payment · ${intent.items.length} recipients`} />
       <ol className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {intent.items.map((item, i) => (
-          <li key={`${item.recipient}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-1.5 text-sm">
+          <li key={`${item.recipient}-${i}`} className="flex items-center justify-between gap-2 rounded-control bg-surface px-3 py-1.5 text-sm">
             <span className="flex min-w-0 items-center gap-2.5">
               <span className="w-5 shrink-0 text-right text-xs tabular-nums text-subtle">{i + 1}</span>
               <Recipient address={item.recipient} contacts={contacts} arcLabels={arcLabels} />
@@ -671,7 +671,7 @@ function ArcNameRows({
               value={intent.years}
               onChange={(e) => onEdit({ ...intent, years: Number(e.target.value) })}
               aria-label="Years"
-              className="rounded-lg border border-line/15 bg-surface px-2 py-1 text-sm font-semibold text-ink outline-none focus:border-brand/50"
+              className="rounded-control border border-line/15 bg-surface px-2 py-1 text-sm font-semibold text-ink outline-none focus:border-brand/50"
             >
               {Array.from({ length: ARC_NAME_MAX_YEARS }, (_, i) => i + 1).map((y) => (
                 <option key={y} value={y}>

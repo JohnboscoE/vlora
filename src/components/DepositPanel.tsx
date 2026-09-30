@@ -7,6 +7,7 @@ import { ACTIVE_CHAIN, ACTIVE_CHAIN_ID } from '@/chain-env';
 import { getTokens } from '@/tokens';
 import { BankDeposit } from '@/components/BankDeposit';
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui';
 
 interface OnrampInfo {
   enabled: boolean;
@@ -125,7 +126,7 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <ArrowDownToLine className="size-4 text-brand" /> Add funds
@@ -136,7 +137,7 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
   }
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -154,25 +155,25 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
       </div>
 
       {!address ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in first to see your deposit address.</p>
+        <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in first to see your deposit address.</p>
       ) : (
         <>
           {qr?.address === address && (
             <div className="mt-4 flex justify-center">
-              <img src={qr.url} alt={`QR code for ${address}`} className="size-36 rounded-xl border border-line/10 bg-white p-1" />
+              <img src={qr.url} alt={`QR code for ${address}`} className="size-36 rounded-control border border-line/10 bg-white p-1" />
             </div>
           )}
 
           <button
             onClick={copy}
-            className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-line/15 bg-surface px-3 py-2.5 text-left transition-colors hover:bg-surface-2"
+            className="mt-3 flex w-full items-center justify-between gap-2 rounded-control border border-line/15 bg-surface px-3 py-2.5 text-left transition-colors hover:bg-surface-2"
             title="Copy your deposit address"
           >
-            <span className="mono min-w-0 break-all text-[11px] leading-snug text-ink-2">{address}</span>
+            <span className="mono min-w-0 break-all text-xs leading-snug text-ink-2">{address}</span>
             {copied ? <Check className="size-4 shrink-0 text-success" /> : <Copy className="size-4 shrink-0 text-muted" />}
           </button>
 
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             Only send on {ACTIVE_CHAIN.name} (chain {ACTIVE_CHAIN_ID}). Funds sent on another network can't be recovered. Gas on Arc is
             paid in USDC, so keep a little for fees.
           </p>
@@ -183,7 +184,7 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 onClick={() => (widgetUrl ? setWidgetUrl(null) : void buyWithCard())}
                 disabled={buying}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink',
+                  'flex w-full items-center justify-center gap-2 rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink',
                   buying && 'opacity-60',
                 )}
               >
@@ -191,14 +192,14 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 {widgetUrl ? 'Close top-up' : 'Buy USDC with a card'}
               </button>
             ) : (
-              <p className="rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+              <p className="rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
                 <span className="font-semibold text-ink-2">Card top-ups aren't available yet.</span> They need a verified Circle account
                 for {ACTIVE_CHAIN.name}. Until then, send {tokens[0]} to the address above from an exchange or another wallet.
               </p>
             )}
             <div className="mt-4 border-t border-line/10 pt-4">
               <h3 className="text-xs font-semibold text-ink">Bank transfer</h3>
-              <p className="mb-2 mt-0.5 text-[11px] leading-relaxed text-muted">
+              <p className="mb-2 mt-0.5 text-xs leading-relaxed text-muted">
                 Pay from your own bank in naira, Kenyan, Ugandan or Tanzanian shillings — no card needed.
               </p>
               <BankDeposit />
@@ -210,12 +211,12 @@ export function DepositPanel({ collapsible = false, open: openProp, onOpenChange
                 src={widgetUrl}
                 title="Buy USDC"
                 allow="payment; camera; microphone; clipboard-write; accelerometer; gyroscope"
-                className="mt-3 h-[620px] w-full rounded-xl border border-line/10 bg-white"
+                className="mt-3 h-[620px] w-full rounded-control border border-line/10 bg-white"
               />
             )}
           </div>
         </>
       )}
-    </section>
+    </Card>
   );
 }

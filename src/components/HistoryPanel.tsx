@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
-import { ChevronDown, Clock, Download, ExternalLink, History, Loader2, Share2, X } from 'lucide-react';
+import { ChevronDown, Clock, Download, ExternalLink, History, Loader2, Receipt, Share2, X } from 'lucide-react';
 import {
   ACTIVITY_LABELS,
   explorerTxUrl,
@@ -17,6 +17,7 @@ import { scanHistory, type ScanProgress } from '@/lib/backfillHistory';
 import { downloadReceipt, shareReceipt } from '@/lib/receipt';
 import { ACTIVE_CHAIN } from '@/chain-env';
 import { cn } from '@/lib/utils';
+import { Card, EmptyState } from '@/components/ui';
 
 interface HistoryPanelProps {
   collapsible?: boolean;
@@ -188,7 +189,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <Clock className="size-4 text-brand" /> History
@@ -200,7 +201,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
   }
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -216,10 +217,11 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
       </div>
 
       {entries.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
-          Nothing here yet — this list starts from the moment you use Vlora. Anything you did before that is still on {' '}
-          {ACTIVE_CHAIN.name}, and the button below reads it back.
-        </p>
+        <EmptyState
+          icon={Receipt}
+          title="No history yet"
+          body={`This list starts the moment you use Vlora. Anything you did before that is still on ${ACTIVE_CHAIN.name}, and the button above reads it back.`}
+        />
       ) : (
         <>
           <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
@@ -228,7 +230,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                 key={option}
                 onClick={() => setRange(option)}
                 className={cn(
-                  'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+                  'shrink-0 rounded-pill border px-2.5 py-1 text-xs font-semibold',
                   range === option ? 'border-brand/40 bg-brand/10 text-brand' : 'border-line/15 text-muted',
                 )}
               >
@@ -239,30 +241,30 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
 
           {range === 'custom' && (
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <label className="block text-[11px] text-muted">
+              <label className="block text-xs text-muted">
                 From
                 <input
                   type="date"
                   value={customFrom}
                   max={customTo || undefined}
                   onChange={(e) => setCustomFrom(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                  className="mt-1 w-full rounded-control border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
                 />
               </label>
-              <label className="block text-[11px] text-muted">
+              <label className="block text-xs text-muted">
                 To
                 <input
                   type="date"
                   value={customTo}
                   min={customFrom || undefined}
                   onChange={(e) => setCustomTo(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                  className="mt-1 w-full rounded-control border border-line/15 bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
                 />
               </label>
             </div>
           )}
 
-          <p className="mt-2 text-[11px] text-muted">
+          <p className="mt-2 text-xs text-muted">
             {shown.length === 0
               ? 'Nothing in this period.'
               : `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}${spent ? ` · ${spent} out` : ''}`}
@@ -276,7 +278,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                   key={kind}
                   onClick={() => setFilter(kind)}
                   className={cn(
-                    'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+                    'shrink-0 rounded-pill border px-2.5 py-1 text-xs font-semibold',
                     filter === kind ? 'border-brand/40 bg-brand/10 text-brand' : 'border-line/15 text-muted',
                   )}
                 >
@@ -292,7 +294,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-xs font-medium text-ink">{entry.title}</p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted">
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
                       <span>{when(entry.at)}</span>
                       <span>·</span>
                       <span>{ACTIVITY_LABELS[entry.kind]}</span>
@@ -321,7 +323,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                         target="_blank"
                         rel="noreferrer"
                         aria-label="View on the explorer"
-                        className="rounded-lg p-1.5 text-subtle hover:text-ink"
+                        className="rounded-control p-1.5 text-subtle hover:text-ink"
                       >
                         <ExternalLink className="size-3.5" />
                       </a>
@@ -329,14 +331,14 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
                     <button
                       onClick={() => void save(entry, 'download')}
                       aria-label="Download receipt"
-                      className="rounded-lg p-1.5 text-subtle hover:text-ink"
+                      className="rounded-control p-1.5 text-subtle hover:text-ink"
                     >
                       {busy === entry.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                     </button>
                     <button
                       onClick={() => void save(entry, 'share')}
                       aria-label="Share receipt"
-                      className="rounded-lg p-1.5 text-subtle hover:text-ink"
+                      className="rounded-control p-1.5 text-subtle hover:text-ink"
                     >
                       <Share2 className="size-3.5" />
                     </button>
@@ -345,7 +347,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             This list is kept in this browser, so it won't follow you to another device. Receipts are generated on your phone or computer
             and never uploaded.
           </p>
@@ -356,7 +358,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
         <div className="mt-3 border-t border-line/10 pt-3">
           {scan ? (
             <>
-              <p className="flex items-center gap-2 text-[11px] text-muted">
+              <p className="flex items-center gap-2 text-xs text-muted">
                 <Loader2 className="size-3.5 shrink-0 animate-spin" />
                 {scan.total === 0
                   ? `Finding where your history starts on ${ACTIVE_CHAIN.name}…`
@@ -366,7 +368,7 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
               </p>
               <button
                 onClick={() => cancelScan.current?.abort()}
-                className="mt-2 w-full rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink"
+                className="mt-2 w-full rounded-control border border-line/15 py-2 text-xs font-semibold text-ink"
               >
                 Stop
               </button>
@@ -375,12 +377,12 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
             <>
               <button
                 onClick={() => void loadEarlier()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-line/15 py-2 text-[11px] font-semibold text-ink"
+                className="flex w-full items-center justify-center gap-2 rounded-control border border-line/15 py-2 text-xs font-semibold text-ink"
               >
                 <History className="size-3.5" />
                 {scanFloor(address) ? 'Keep reading older history' : 'Load my history from Arc'}
               </button>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">
+              <p className="mt-1.5 text-xs leading-relaxed text-subtle">
                 Reads every transfer this wallet has made or received. Arc's public nodes answer 5,000 blocks at a time, so a long history
                 takes a few minutes — rows appear as they are found, and you can stop whenever.
               </p>
@@ -388,6 +390,6 @@ export function HistoryPanel({ collapsible = false, open: openProp, onOpenChange
           )}
         </div>
       )}
-    </section>
+    </Card>
   );
 }

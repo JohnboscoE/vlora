@@ -10,6 +10,7 @@ import { recordActivity } from '@/lib/activity';
 import { usdc } from '@/lib/insights';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui';
 
 /**
  * Savings targets.
@@ -101,7 +102,7 @@ export function SavingsPanel() {
   };
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5">
+    <section className="rounded-card border border-line/10 bg-surface/80 p-5">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
         <Target className="size-4 text-brand" /> Savings targets
       </h2>
@@ -110,14 +111,14 @@ export function SavingsPanel() {
         earns while it waits. Nothing is locked — take it out whenever you like.
       </p>
 
-      <div className="mt-4 space-y-2 rounded-2xl bg-surface-2 p-3">
+      <div className="mt-4 space-y-2 rounded-card-sm bg-surface-2 p-3">
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="What for? e.g. Rent"
             aria-label="What the target is for"
-            className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+            className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
           />
           <input
             value={target}
@@ -125,7 +126,7 @@ export function SavingsPanel() {
             inputMode="decimal"
             placeholder="USDC"
             aria-label="Amount to save"
-            className="w-24 rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+            className="w-24 rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
           />
         </div>
         <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -134,11 +135,11 @@ export function SavingsPanel() {
             value={due}
             onChange={(e) => setDue(e.target.value)}
             aria-label="Date to reach it by (optional)"
-            className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-brand/50"
+            className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-xs text-ink outline-none focus:border-brand/50"
           />
           <button
             onClick={create}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-ink"
+            className="flex items-center gap-1.5 rounded-control bg-primary px-3 py-2 text-xs font-semibold text-primary-ink"
           >
             <Plus className="size-3.5" /> Add target
           </button>
@@ -146,19 +147,21 @@ export function SavingsPanel() {
       </div>
 
       {goals.length === 0 ? (
-        <p className="mt-3 text-[11px] leading-relaxed text-subtle">
-          No targets yet. A date is optional — add one and the panel works out what a day needs to look like to make it.
-        </p>
+        <EmptyState
+          icon={Target}
+          title="No targets yet"
+          body="Name something you are saving for and how much it needs. A date is optional — add one and the panel works out what a day has to look like to make it."
+        />
       ) : (
         <ul className="mt-3 space-y-3">
           {goals.map((goal) => {
             const progress = progressOf(goal);
             return (
-              <li key={goal.id} className="rounded-2xl border border-line/10 p-3">
+              <li key={goal.id} className="rounded-card-sm border border-line/10 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold text-ink">{goal.name}</p>
-                    <p className="mt-0.5 text-[11px] text-muted">
+                    <p className="mt-0.5 text-xs text-muted">
                       {usdc(goal.saved)} of {usdc(goal.target)} USDC{goal.saved > 0 ? ' · held in the Earn vault' : ''}
                       {progress.done && <span className="text-success"> · reached</span>}
                       {!progress.done && progress.perDay != null && (
@@ -172,15 +175,15 @@ export function SavingsPanel() {
                   <button
                     onClick={() => (goal.saved > 0 ? setConfirmRemove(goal.id) : removeGoal(address, goal.id))}
                     aria-label={`Remove ${goal.name}`}
-                    className="rounded-lg p-1.5 text-subtle hover:text-danger"
+                    className="rounded-control p-1.5 text-subtle hover:text-danger"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
 
                 {confirmRemove === goal.id && (
-                  <div className="mt-2 rounded-xl border border-danger/30 bg-danger/5 p-2.5">
-                    <p className="text-[11px] leading-relaxed text-ink">
+                  <div className="mt-2 rounded-control border border-danger/30 bg-danger/5 p-2.5">
+                    <p className="text-xs leading-relaxed text-ink">
                       This target still holds {usdc(goal.saved)} USDC, and that money is in the Earn vault. Take it out first, then the
                       target can be removed — a target with money in it stays on the list so the money never goes quiet.
                     </p>
@@ -191,13 +194,13 @@ export function SavingsPanel() {
                           setConfirmRemove(null);
                           void move(goal, 'out');
                         }}
-                        className="rounded-lg bg-primary px-2 py-1.5 text-[11px] font-semibold text-primary-ink"
+                        className="rounded-control bg-primary px-2 py-1.5 text-xs font-semibold text-primary-ink"
                       >
                         Take it out
                       </button>
                       <button
                         onClick={() => setConfirmRemove(null)}
-                        className="rounded-lg border border-line/15 px-2 py-1.5 text-[11px] font-semibold text-ink"
+                        className="rounded-control border border-line/15 px-2 py-1.5 text-xs font-semibold text-ink"
                       >
                         Cancel
                       </button>
@@ -206,9 +209,9 @@ export function SavingsPanel() {
                 )}
 
                 {/* A meter, not a chart: one ratio against one limit */}
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
+                <div className="mt-2 h-2 overflow-hidden rounded-pill bg-surface-2">
                   <div
-                    className={cn('h-full rounded-full', progress.done ? 'bg-success' : 'bg-brand')}
+                    className={cn('h-full rounded-pill', progress.done ? 'bg-success' : 'bg-brand')}
                     style={{ width: `${Math.round(progress.fraction * 100)}%` }}
                   />
                 </div>
@@ -220,19 +223,19 @@ export function SavingsPanel() {
                     inputMode="decimal"
                     placeholder="USDC"
                     aria-label={`Amount for ${goal.name}`}
-                    className="w-full rounded-xl border border-line/15 bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
+                    className="w-full rounded-control border border-line/15 bg-surface px-3 py-1.5 text-xs text-ink outline-none focus:border-brand/50"
                   />
                   <button
                     onClick={() => void move(goal, 'in')}
                     disabled={busy === goal.id}
-                    className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-ink disabled:opacity-40"
+                    className="flex items-center gap-1.5 rounded-control bg-primary px-3 py-1.5 text-xs font-semibold text-primary-ink disabled:opacity-40"
                   >
                     {busy === goal.id && <Loader2 className="size-3 animate-spin" />} Add
                   </button>
                   <button
                     onClick={() => void move(goal, 'out')}
                     disabled={busy === goal.id || goal.saved <= 0}
-                    className="rounded-xl border border-line/15 px-3 py-1.5 text-[11px] font-semibold text-ink disabled:opacity-40"
+                    className="rounded-control border border-line/15 px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40"
                   >
                     Take out
                   </button>
@@ -243,7 +246,7 @@ export function SavingsPanel() {
         </ul>
       )}
 
-      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
+      <p className="mt-3 text-xs leading-relaxed text-subtle">
         Targets are kept in this browser; the money is in the vault on {ACTIVE_CHAIN.name}. Removing a target never moves money — if a
         target disappears with a balance, the USDC is still yours in Earn, where you can withdraw it.
       </p>

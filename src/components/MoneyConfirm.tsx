@@ -63,7 +63,7 @@ export function MoneyConfirm({ pending, onConfirm, onCancel, busy, step }: Money
   const Icon = pending.kind === 'cashout' ? Banknote : Receipt;
 
   return (
-    <div className="rounded-3xl border border-line/10 bg-surface/90 p-4 backdrop-blur">
+    <div className="rounded-card border border-line/10 bg-surface/90 p-4 backdrop-blur">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
         <Icon className="size-4 text-brand" /> {title}
       </h3>
@@ -77,22 +77,22 @@ export function MoneyConfirm({ pending, onConfirm, onCancel, busy, step }: Money
         ))}
       </dl>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
+      <p className="mt-3 text-xs leading-relaxed text-subtle">
         {pending.kind === 'cashout'
           ? `Paycrest pays the bank. They don't accept ${ACTIVE_CHAIN.name} yet, so your USDC goes to their account on ${BRIDGE_CHAIN_LABEL} first — one signature, and the detour goes when they add ${ACTIVE_CHAIN.name}. A refund, if no provider takes it, lands on ${BRIDGE_CHAIN_LABEL}.`
           : `Bitrefill delivers straight to that number. Check it before you confirm — a top-up can't be undone.`}
       </p>
 
       {busy ? (
-        <p className="mt-3 flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-2.5 text-xs text-muted">
+        <p className="mt-3 flex items-center gap-2 rounded-control bg-surface-2 px-3 py-2.5 text-xs text-muted">
           <Loader2 className="size-3.5 shrink-0 animate-spin" /> {step || 'Working…'}
         </p>
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button onClick={onCancel} className="rounded-xl border border-line/15 py-2.5 text-xs font-semibold text-ink">
+          <button onClick={onCancel} className="rounded-control border border-line/15 py-2.5 text-xs font-semibold text-ink">
             Cancel
           </button>
-          <button onClick={onConfirm} className={cn('rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-ink')}>
+          <button onClick={onConfirm} className={cn('rounded-control bg-primary py-2.5 text-xs font-semibold text-primary-ink')}>
             Confirm
           </button>
         </div>

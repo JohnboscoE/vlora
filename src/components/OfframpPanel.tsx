@@ -21,6 +21,7 @@ import { updateActivity } from '@/lib/activity';
 import { runCashOut } from '@/lib/runMoney';
 import { describeWalletError } from '@/lib/walletError';
 import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui';
 
 interface OfframpPanelProps {
   collapsible?: boolean;
@@ -241,7 +242,7 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-2 rounded-2xl border border-line/15 bg-surface/80 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 rounded-card-sm border border-line/15 bg-surface/80 px-4 py-3 text-left"
       >
         <span className="flex items-center gap-2.5 text-sm font-medium text-ink">
           <Banknote className="size-4 text-brand" /> Cash out to a bank
@@ -254,12 +255,12 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
   const payout = quote && amount ? Number(amount) * Number(quote.rate) : 0;
 
   return (
-    <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <Banknote className="size-4 text-brand" /> Cash out
-            <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand">Beta</span>
+            <span className="rounded-pill bg-brand/10 px-1.5 py-0.5 text-micro font-semibold uppercase tracking-wide text-brand">Beta</span>
           </h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Turn USDC into local currency, paid straight into a bank account.
@@ -273,12 +274,12 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
       </div>
 
       {info && !info.enabled ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
+        <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
           Cashing out isn't switched on here yet{info.reason ? ` (${info.reason})` : ''}. You can still send USDC to an exchange that
           supports {ACTIVE_CHAIN.name}.
         </p>
       ) : !isConnected || !address ? (
-        <p className="mt-4 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to cash out.</p>
+        <p className="mt-4 rounded-control bg-surface-2 px-3 py-2 text-xs text-muted">Connect or sign in to cash out.</p>
       ) : stage === 'form' ? (
         <>
           <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
@@ -288,13 +289,13 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
               inputMode="decimal"
               placeholder="Amount in USDC"
               aria-label="Amount in USDC"
-              className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+              className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
             />
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               aria-label="Payout currency"
-              className="rounded-xl border border-line/15 bg-surface px-2 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+              className="rounded-control border border-line/15 bg-surface px-2 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
             >
               {(info?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
@@ -303,7 +304,7 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
               ))}
             </select>
           </div>
-          {amountProblem && <p className="mt-1.5 text-[11px] text-danger">{amountProblem}</p>}
+          {amountProblem && <p className="mt-1.5 text-xs text-danger">{amountProblem}</p>}
           {quote && quote.for === `${amount}:${currency}` && !amountProblem && (
             <p className="mt-1.5 text-xs text-muted">
               They receive <span className="font-semibold text-ink">{money(payout, symbol)}</span> at {money(quote.rate, symbol)} per USDC
@@ -315,7 +316,7 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
             <select
               value={institution}
               onChange={(e) => setChosenBank(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
+              className="mt-1 w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm font-medium text-ink outline-none focus:border-brand/50"
             >
               <option value="">Choose a bank…</option>
               {institutions.map((i) => (
@@ -333,13 +334,13 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
               inputMode="numeric"
               placeholder="Account number"
               aria-label="Account number"
-              className="w-full rounded-xl border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
+              className="w-full rounded-control border border-line/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand/50"
             />
             <button
               onClick={() => void verify()}
               disabled={!institution || accountNumber.length < 5 || verifying}
               className={cn(
-                'flex items-center gap-1.5 rounded-xl border border-line/15 px-3 text-xs font-semibold text-ink',
+                'flex items-center gap-1.5 rounded-control border border-line/15 px-3 text-xs font-semibold text-ink',
                 (!institution || accountNumber.length < 5 || verifying) && 'opacity-40',
               )}
             >
@@ -353,13 +354,13 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
             onClick={review}
             disabled={!ready}
             className={cn(
-              'mt-4 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-ink',
+              'mt-4 w-full rounded-control bg-primary py-2.5 text-sm font-semibold text-primary-ink',
               !ready && 'opacity-40',
             )}
           >
             Review cash-out
           </button>
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             Paycrest pays the bank. Rates move, so the figure is fixed when you confirm. Your wallet signs once, on {ACTIVE_CHAIN.name}.
           </p>
         </>
@@ -391,22 +392,22 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
               <dd className="font-semibold text-ink">≈ {(Number(amount) + Number(bridgeFee ?? 0)).toFixed(4).replace(/\.?0+$/, '')} USDC</dd>
             </div>
           </dl>
-          <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-muted">
+          <p className="mt-3 rounded-control bg-surface-2 px-3 py-2 text-xs leading-relaxed text-muted">
             Paycrest doesn't accept {ACTIVE_CHAIN.name} yet, so Vlora moves your USDC to their account on {BRIDGE_CHAIN_LABEL} first — one
             signature, no extra wallet needed. This detour goes away when they add {ACTIVE_CHAIN.name}. If no payout provider takes the
             order, the USDC is refunded to your address on {BRIDGE_CHAIN_LABEL}, where moving it needs a little ETH for gas.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button onClick={() => setStage('form')} className="rounded-xl border border-line/15 py-2.5 text-xs font-semibold text-ink">
+            <button onClick={() => setStage('form')} className="rounded-control border border-line/15 py-2.5 text-xs font-semibold text-ink">
               Back
             </button>
-            <button onClick={() => void confirm()} className="rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-ink">
+            <button onClick={() => void confirm()} className="rounded-control bg-primary py-2.5 text-xs font-semibold text-primary-ink">
               Confirm cash-out
             </button>
           </div>
         </>
       ) : stage === 'working' ? (
-        <p className="mt-4 flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-3 text-xs text-muted">
+        <p className="mt-4 flex items-center gap-2 rounded-control bg-surface-2 px-3 py-3 text-xs text-muted">
           <Loader2 className="size-3.5 shrink-0 animate-spin" /> {step || 'Working…'}
         </p>
       ) : (
@@ -426,17 +427,17 @@ export function OfframpPanel({ collapsible = false, open: openProp, onOpenChange
             </div>
             <div className="flex justify-between">
               <dt className="text-muted">Reference</dt>
-              <dd className="max-w-[60%] truncate text-right font-mono text-[11px] text-ink-2">{order?.id}</dd>
+              <dd className="max-w-[60%] truncate text-right font-mono text-xs text-ink-2">{order?.id}</dd>
             </div>
           </dl>
-          <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
             Bank payouts usually land in a couple of minutes. You can close this — it keeps going, and "/history" has the receipt.
           </p>
-          <button onClick={reset} className="mt-3 w-full rounded-xl border border-line/15 py-2.5 text-xs font-semibold text-ink">
+          <button onClick={reset} className="mt-3 w-full rounded-control border border-line/15 py-2.5 text-xs font-semibold text-ink">
             Cash out again
           </button>
         </>
       )}
-    </section>
+    </Card>
   );
 }

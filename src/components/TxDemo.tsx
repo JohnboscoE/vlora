@@ -72,7 +72,7 @@ export function TxDemo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'flex w-full max-w-sm flex-col rounded-3xl border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur-xl',
+        'flex w-full max-w-sm flex-col rounded-card border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur-xl',
         className,
       )}
       aria-label="Animated example: a one-line instruction becomes a confirmed 25 USDC transfer"
@@ -81,8 +81,8 @@ export function TxDemo({ className }: { className?: string }) {
       {/* Window chrome */}
       <div className="mb-4 flex items-center justify-between">
         <span className="flex items-center gap-2"><LogoMark className="size-6" /><span className="display text-sm font-semibold text-white">Vlora</span></span>
-        <span className="flex items-center gap-1.5 text-[11px] text-white/70">
-          <span className="size-1.5 rounded-full bg-[#7ef1b3]" />
+        <span className="flex items-center gap-1.5 text-xs text-white/70">
+          <span className="size-1.5 rounded-pill bg-[#7ef1b3]" />
           {ACTIVE_CHAIN.name}
         </span>
       </div>
@@ -96,7 +96,7 @@ export function TxDemo({ className }: { className?: string }) {
         <AnimatePresence>
           {showUserBubble && (
             <motion.div key="user" {...bubbleMotion} className="flex justify-end">
-              <div className="rounded-2xl rounded-br-md bg-white px-4 py-2.5 text-sm font-medium text-[#0b1830]">
+              <div className="rounded-card-sm rounded-br-md bg-white px-4 py-2.5 text-sm font-medium text-[#0b1830]">
                 {COMMAND}
               </div>
             </motion.div>
@@ -108,7 +108,7 @@ export function TxDemo({ className }: { className?: string }) {
           {showReply && (
             <motion.div key="reply" {...bubbleMotion} className="flex flex-col gap-2">
               <p className="text-xs text-white/75">Here's exactly what will happen:</p>
-              <div className="rounded-2xl bg-white/95 p-4 text-[#122d45]">
+              <div className="rounded-card-sm bg-white/95 p-4 text-[#122d45]">
                 <dl className="space-y-2 text-sm">
                   {[
                     ['Amount', '25 USDC'],
@@ -116,7 +116,7 @@ export function TxDemo({ className }: { className?: string }) {
                     ['Network', ACTIVE_CHAIN.name],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between">
-                      <dt className="text-[11px] font-medium uppercase tracking-widest text-[#8a849c]">{k}</dt>
+                      <dt className="text-xs font-medium uppercase tracking-widest text-[#8a849c]">{k}</dt>
                       <dd className="font-semibold tabular-nums">{v}</dd>
                     </div>
                   ))}
@@ -124,7 +124,7 @@ export function TxDemo({ className }: { className?: string }) {
 
                 <motion.div
                   className={cn(
-                    'mt-4 flex h-10 items-center justify-center gap-2 overflow-hidden rounded-xl text-sm font-semibold text-white',
+                    'mt-4 flex h-10 items-center justify-center gap-2 overflow-hidden rounded-control text-sm font-semibold text-white',
                     cardStatus === 'done' ? 'bg-[#1a8047]' : 'bg-[#122d45]',
                   )}
                   animate={{ scale: pressed ? 0.95 : 1 }}
@@ -160,9 +160,9 @@ export function TxDemo({ className }: { className?: string }) {
                 </motion.div>
 
                 {/* Settlement progress */}
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-[#122d45]/10">
+                <div className="mt-3 h-1 overflow-hidden rounded-pill bg-[#122d45]/10">
                   <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-[#1f51ff] to-[#00e5ff]"
+                    className="h-full rounded-pill bg-gradient-to-r from-[#1f51ff] to-[#00e5ff]"
                     initial={false}
                     animate={{
                       width:
@@ -182,10 +182,10 @@ export function TxDemo({ className }: { className?: string }) {
             <motion.div
               key="done"
               {...bubbleMotion}
-              className="flex items-start gap-2.5 rounded-2xl bg-[#7ef1b3]/15 px-3.5 py-3 text-sm text-white"
+              className="flex items-start gap-2.5 rounded-card-sm bg-[#7ef1b3]/15 px-3.5 py-3 text-sm text-white"
             >
               <motion.span
-                className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[#7ef1b3] text-[#0b1830]"
+                className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-pill bg-[#7ef1b3] text-[#0b1830]"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 14, delay: 0.1 }}
@@ -204,7 +204,7 @@ export function TxDemo({ className }: { className?: string }) {
       </motion.div>
 
       {/* Composer with typewriter */}
-      <div className="mt-3 flex h-11 items-center gap-2 rounded-2xl bg-white/90 px-4 text-sm text-[#0b1830]">
+      <div className="mt-3 flex h-11 items-center gap-2 rounded-card-sm bg-white/90 px-4 text-sm text-[#0b1830]">
         <span className="flex-1 truncate">
           {phase === 'typing' ? (
             <>
@@ -217,7 +217,7 @@ export function TxDemo({ className }: { className?: string }) {
         </span>
         <span
           className={cn(
-            'flex size-7 items-center justify-center rounded-lg bg-[#122d45] text-white transition-opacity',
+            'flex size-7 items-center justify-center rounded-control bg-[#122d45] text-white transition-opacity',
             phase === 'typing' && typed === COMMAND.length ? 'opacity-100' : 'opacity-40',
           )}
         >
