@@ -40,6 +40,11 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
+/** A JSON scalar as text. Anything else (an object, an array) has no sensible text form */
+function scalar(v: unknown): string {
+  return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : '';
+}
+
 const json = (status: number, body: unknown) => Response.json(body, { status });
 
 export function maxUsdc(): number {
@@ -135,7 +140,7 @@ function toProduct(raw: unknown): BillProduct | null {
     packages: packages
       .map((pkg) => {
         const o = pkg as Record<string, unknown>;
-        return { id: str(o.id) || str(o.package_id), value: String(o.value ?? ''), price: typeof o.price === 'number' ? o.price : undefined };
+        return { id: str(o.id) || str(o.package_id), value: scalar(o.value), price: typeof o.price === 'number' ? o.price : undefined };
       })
       .filter((pkg) => pkg.id !== ''),
     ...(range && typeof range.min === 'number' && typeof range.max === 'number'
@@ -254,7 +259,7 @@ export interface BillPayment {
  * an invoice rather than overpay it, and the ceiling bounds it either way.
  */
 export function interpretPrice(raw: unknown): { usdc: number; smallestUnit: boolean } | null {
-  const text = String(raw ?? '').trim();
+  const text = scalar(raw).trim();
   if (!/^\d+(\.\d+)?$/.test(text)) return null;
   const value = Number(text);
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -309,7 +314,7 @@ export function paymentProblem(invoice: unknown, max = maxUsdc()): { problem: st
   const currency = str(payment?.currency).toUpperCase();
 
   // Say what Bitrefill actually sent, so a refusal is diagnosable instead of mysterious
-  const quoted = `${str(payment?.price) || String(payment?.price ?? '?')} ${currency || '(no currency)'} by ${str(payment?.method) || 'unknown method'}`;
+  const quoted = `${str(payment?.price) || scalar(payment?.price) || '?'} ${currency || '(no currency)'} by ${str(payment?.method) || 'unknown method'}`;
 
   if (!id) return { problem: 'the invoice has no id' };
   if (!isAddress(address)) return { problem: 'the payment address is not an address' };

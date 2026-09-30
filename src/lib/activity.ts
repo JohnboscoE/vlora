@@ -110,7 +110,7 @@ export function updateActivity(address: string | undefined, id: string, patch: P
   const entries = loadActivity(address);
   const index = entries.findIndex((e) => e.id === id);
   if (index < 0) return;
-  entries[index] = { ...entries[index], ...patch } as ActivityEntry;
+  entries[index] = { ...entries[index], ...patch };
   save(address, entries);
 }
 

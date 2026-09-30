@@ -12,23 +12,31 @@ function significantDigits(raw: string): string | null {
 }
 
 /**
- * Recipients the owner typed in THIS message. An address, .arc name, phone number
- * or meter number that only appears in chat history, a tool result, or the model's
- * reply is never allowed — otherwise text the agent merely read could choose who
- * gets paid.
+ * Recipients the OWNER typed. An address, .arc name, phone number or meter number
+ * that only appears in a tool result, a name record, a page the agent fetched, or
+ * the model's own reply is never allowed — otherwise text the agent merely read
+ * could choose who gets paid.
+ *
+ * The owner's earlier turns count, because the owner typed those too: "send 0.5 to
+ * john.arc and 0.5 to jona.arc" followed by "yes, go ahead" is one instruction
+ * split across two messages, and refusing the second half taught people that names
+ * don't work. What stays excluded is everything the owner did not type, which is
+ * the whole boundary. Only owner turns may be passed in `alsoTyped` — never an
+ * assistant turn, and never a tool result.
  */
 export class RecipientGuard {
   private readonly addresses: Set<string>;
   private readonly names: Set<string>;
   private readonly numbers: Set<string>;
 
-  constructor(ownerMessage: string) {
+  constructor(ownerMessage: string, alsoTyped: string[] = []) {
+    const typed = [ownerMessage, ...alsoTyped].join('\n');
     // Whole 40-hex addresses only: a pasted 64-hex tx hash doesn't make its prefix payable
-    this.addresses = new Set((ownerMessage.match(/\b0x[a-fA-F0-9]{40}\b/g) ?? []).map((a) => a.toLowerCase()));
-    this.names = new Set((ownerMessage.match(/\b[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
+    this.addresses = new Set((typed.match(/\b0x[a-fA-F0-9]{40}\b/g) ?? []).map((a) => a.toLowerCase()));
+    this.names = new Set((typed.match(/\b[a-z0-9-]{3,32}(?=\.arc\b)/gi) ?? []).map((n) => n.toLowerCase()));
     // Phone and meter numbers. Addresses go first so their digits can't be read
     // as a line to top up.
-    const withoutAddresses = ownerMessage.replace(/0x[a-fA-F0-9]+/g, ' ');
+    const withoutAddresses = typed.replace(/0x[a-fA-F0-9]+/g, ' ');
     this.numbers = new Set(
       (withoutAddresses.match(/\+?\d[\d\s().-]{5,20}\d/g) ?? [])
         .map((candidate) => significantDigits(candidate))

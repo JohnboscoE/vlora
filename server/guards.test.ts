@@ -19,10 +19,29 @@ describe('RecipientGuard — recipients must come from the owner, not the model'
     expect(new RecipientGuard(`send 5 USDC to ${ALICE}`).isAllowed(MALLORY)).toBe(false);
   });
 
-  it('rejects an address that appears only in chat history (only the latest message counts)', () => {
-    // The guard is built from the owner's latest message alone; history is never passed in
+  it('rejects an address that appears nowhere the owner typed', () => {
     const guard = new RecipientGuard('send the same again');
     expect(guard.isAllowed(ALICE)).toBe(false);
+  });
+
+  // An instruction and its confirmation are often two messages. The owner typed
+  // both, so both count — which is what makes "yes, go ahead" work.
+  it('accepts an address the owner typed in an earlier turn of their own', () => {
+    const guard = new RecipientGuard('yes, go ahead', [`send 5 USDC to ${ALICE}`]);
+    expect(guard.isAllowed(ALICE)).toBe(true);
+  });
+
+  it('still refuses an address that only the assistant or a tool produced', () => {
+    // Only owner turns are ever passed as `alsoTyped`; this is what the caller filters for
+    const guard = new RecipientGuard('yes, go ahead', ['send 5 USDC to alice']);
+    expect(guard.isAllowed(MALLORY)).toBe(false);
+  });
+
+  it('carries a .arc name across the owner\'s own turns', () => {
+    const guard = new RecipientGuard('/send', ['Send 0.5 USDC to john.arc. Send 0.5 USDC to jona.arc']);
+    expect(guard.typedName('john')).toBe(true);
+    expect(guard.typedName('jona')).toBe(true);
+    expect(guard.typedName('mallory')).toBe(false);
   });
 
   it('does not treat the prefix of a pasted 64-hex hash as an address', () => {
@@ -73,6 +92,8 @@ describe('RecipientGuard — phone and meter numbers', () => {
 
   it('rejects a number that only appeared earlier in the conversation', () => {
     expect(new RecipientGuard('do that again').typedNumber('08031234567')).toBe(false);
+    // ...but a number the owner typed themselves a turn earlier still counts
+    expect(new RecipientGuard('do that again', ['top up 08031234567']).typedNumber('08031234567')).toBe(true);
   });
 
   it('allows a meter number the owner typed', () => {

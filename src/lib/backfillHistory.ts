@@ -82,7 +82,7 @@ async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<v
     Array.from({ length: Math.min(limit, items.length) }, async () => {
       while (next < items.length) {
         const index = next++;
-        await work(items[index] as T);
+        await work(items[index]);
       }
     }),
   );
@@ -148,7 +148,7 @@ export async function scanHistory(
   if (!address) throw new Error('No wallet to look up');
   const rpc = client();
   const tokens = getTokens(ACTIVE_CHAIN_ID);
-  const addresses = tokens.map((t) => t.address as Address);
+  const addresses = tokens.map((t) => t.address);
   const byAddress = new Map(tokens.map((t) => [t.address.toLowerCase(), t]));
 
   const head = toBlock ?? (await withRetry(() => rpc.getBlockNumber()));

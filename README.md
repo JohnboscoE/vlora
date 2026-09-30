@@ -2,8 +2,8 @@
   <img src="public/vlora-logo.svg" alt="Vlora" width="220" />
 </p>
 
-<p align="center"><strong>An AI agent that can spend your USDC — but provably can't drain it.</strong><br/>
-Plain-language payments on <a href="https://arc.io">Arc</a>, the stablecoin chain where USDC is the gas.</p>
+<p align="center"><strong>Vlora turns a one-line instruction into a validated USDC transaction on Arc.</strong><br/>
+Type what you want — <em>send 25 USDC to james.arc</em>, <em>cash out 20 USDC to gtbank 0123456789</em>, <em>buy 500 airtime for 0803…</em> — and it is read, checked, simulated on-chain and shown to you before anything is signed.</p>
 
 <p align="center"><a href="https://vlora-two.vercel.app"><strong>Live → vlora-two.vercel.app</strong></a> (Arc mainnet)</p>
 
@@ -11,13 +11,30 @@ Plain-language payments on <a href="https://arc.io">Arc</a>, the stablecoin chai
 
 ---
 
-Vlora lets you tell an AI agent *"pay james.arc 3 USDC"* and have it happen without signing every transaction — from a sub-account whose limits are enforced by a smart contract, not by the AI's good behaviour. Everything else in the app is the same idea without the AI: you type what you want (`send 10 USDC to james.arc`, `pay alice 5 and bob 7`), and nothing is signed until it has been validated, simulated on-chain and shown to you.
+[Arc](https://arc.io) is the chain where USDC *is* the gas, and that is what makes a sentence a workable payment interface: one token to hold, fees around a cent, confirmation in seconds. So Vlora is a chat. You write the instruction; a deterministic parser (`src/utils/intentParser.ts`, `src/utils/moneyIntent.ts` — pattern matching, **not** an LLM) works out what you meant; validation, a dry run against the live chain and a confirmation sheet stand between that and your wallet.
+
+The same sentence works from any tab, and the answer comes back where you asked it.
+
+One mode is different. In **agent mode** an AI model (Claude Haiku 4.5, server-side) spends from a sub-account you funded, without you signing each transaction — inside limits a smart contract enforces. That is the one place a model touches money, and the next section is about why it still can't drain you. Everywhere else, no model is involved.
+
+## What has actually moved money
+
+On Arc **mainnet**, with real funds:
+
+- Sends (USDC, EURC, cirBTC), swaps, batch payments, `.arc` names, Earn deposits and withdrawals
+- **Cash out to a bank** — an order completed end to end: USDC on Arc → bank account, naira received
+- **Airtime** — two top-ups completed end to end, delivered to the phone
+- History, receipts, the spending chart and the statement, all built from those real transactions
+
+Built, tested and shipped but **not yet proven end to end**: the agent buying a bill by itself (the vault → agent → bridge path has failed once at the bridge), and gasless sends (the Facilitator returns 403 on this account — the keyless trial is the intended fix and isn't wired yet). Both say so in the app rather than pretending.
+
+Written, unit-tested, and deliberately **not in the app**: `Fundraiser.sol`, `TeamUp.sol`, `Treasury.sol`. They are real contracts with 55 passing tests between them, held back because shipping unaudited group-custody UI was more scope than this deserves.
 
 ## Why the agent can't drain you
 
 The model is treated as untrusted. Four independent layers sit between what it wants and what moves:
 
-1. **Recipients come from you, not the model.** The server only pays an address or `.arc` name that appears in *your* message. Text the model reads — a web page, a name record, a crafted reply — can't redirect funds (the main prompt-injection risk for payment agents).
+1. **Recipients come from you, not the model.** The server only pays an address or `.arc` name *you* typed — in this message or an earlier turn of your own, so an instruction and its "yes, go ahead" can be two messages. Assistant replies and tool results are never counted. Text the model reads — a web page, a name record, a crafted reply — can't redirect funds (the main prompt-injection risk for payment agents).
 2. **Deterministic checks on the server.** Amount, per-transaction limit, today's remaining allowance, and a dry run of the exact call, before anything is sent. At most 5 actions per message.
 3. **On-chain caps in `AgentVault`.** Per-token per-transaction limits and a **rolling 24-hour** limit (no midnight reset), expiry, pause and revoke — enforced by the contract even if the server and its key are fully compromised.
 4. **You stay the owner.** Withdraw, pause or revoke at any time from your own wallet; the agent key can never withdraw.
@@ -32,12 +49,11 @@ This is tested, not just stated: a Foundry invariant test drives a hostile agent
 
 ## Status
 
-Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (see [Mainnet](#mainnet)).
+Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (see [Mainnet](#mainnet)). Everything in the table can also be done by typing it — the tabs are a second way in, not the only one.
 
 | Feature | Arc Testnet | Arc mainnet |
 |---|---|---|
 | Send USDC, EURC, cirBTC | ✅ | ✅ |
-| Gasless USDC sends (Circle pays the fee) | ✅ with `CIRCLE_API_KEY` | ✅ with `CIRCLE_API_KEY` |
 | Balances | ✅ | ✅ |
 | Contacts, saved batches, CSV import | ✅ | ✅ |
 | Payment request links | ✅ | ✅ |
@@ -45,26 +61,38 @@ Live on **Arc mainnet** at the link above; the same code runs on Arc Testnet (se
 | Swaps USDC ⇄ EURC ⇄ cirBTC | ✅ via Synthra | ✅ via LI.FI (the Arc Portal's swap aggregator) |
 | Batch payments (many recipients, one tx) | ✅ | ✅ |
 | Email / Google sign-in with an embedded wallet (Privy) | ✅ with `VITE_PRIVY_APP_ID` | ✅ with `VITE_PRIVY_APP_ID` |
+| Earn on idle USDC in an Arc lending vault | ✅ | ✅ |
+| Savings targets (a named goal, held in the Earn vault) | ✅ | ✅ |
+| Cash out to a bank (NGN, KES, UGX, TZS) | — Paycrest is mainnet-only | ✅ with `PAYCREST_API_KEY` — **completed live** |
+| Airtime, data, electricity, TV | — Bitrefill is mainnet-only | ✅ with `BITREFILL_API_KEY` — **completed live** |
+| Move everything to one wallet (`/sweep`) | ✅ | ✅ |
+| History, PNG receipts, log backfill from Arc | ✅ | ✅ |
+| Spending chart (`/activity`) and CSV / printable statement | ✅ | ✅ |
 | Agent wallet (AI sub-account, no per-tx signing) | ✅ beta | ✅ beta — USDC sends only, ≤ 50 USDC/day cap, unaudited |
+| Agent buys a bill from its vault | — | ⚠️ shipped, not yet proven end to end |
+| Gasless USDC sends (Circle pays the fee) | ⚠️ needs an entitled `CIRCLE_API_KEY` | ⚠️ 403 on this account — not working yet |
 
 ## What it does
 
-- **Sign in without a wallet** — with Privy configured, email or Google creates an embedded wallet on the spot; people who already have a wallet still connect theirs. Both paths behave the same everywhere in the app.
-- **Agent wallet (beta)** — type `/agent` and the AI acts from a sub-account you fund, within limits the contract enforces; `/exit` returns to normal mode. See [Why the agent can't drain you](#why-the-agent-cant-drain-you).
-- **The agent can pay bills** — in agent mode, "buy 500 airtime for 0803…" is bought from the vault within its on-chain caps. The number has to come from your own message, a failed payment returns the USDC to the vault, and the agent's own balance pays the fees. See [Airtime and bills](#airtime-and-bills-bitrefill).
-- **Check before you sign** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
+Everything below is typed. Seven tabs (Chat, Send, Swap, Earn, Bills, Cash out, History) give each area a home and its own thread, but a tab is a shortcut — the sentence works from anywhere, and the answer appears where you asked it.
+
+- **Type it, check it, sign it** — each transaction is validated locally, then dry-run against the live chain (`eth_call`) with the real fee estimate. Anything that would revert, or wouldn't leave enough USDC for gas, is blocked with a reason. If the chain can't be reached, signing is blocked (fail-closed).
 - **Pay by name** — `send 10 USDC to james.arc`. Names are resolved on-chain, shown next to the address, and re-resolved right before signing; if the owner changed, the send is stopped.
+- **Cash out to a bank** — "cash out 20 USDC to gtbank 0123456789" resolves the bank, checks the account name and asks once. USDC becomes naira, Kenyan shillings, Ugandan shillings or Tanzanian shillings in a real bank account, paid by [Paycrest](https://paycrest.io). See [Cashing out](#cashing-out-paycrest).
+- **Airtime, data and bills** — "buy 500 airtime for 08012345678" works out the network from the number itself; "pay 5000 electricity for meter 04123456789 on ikeja" pays a disco. Paid with USDC, delivered by [Bitrefill](https://www.bitrefill.com). See [Airtime and bills](#airtime-and-bills-bitrefill).
+- **Earn, and save toward something** — "deposit 5 USDC" lends idle USDC in an Arc vault through Circle's App Kit. "create a target called rent, cap 100 usdc, due 30th of October" names a goal; "add 2 to rent" funds it, and the money sits in the same Earn vault, earning, until you take it out. A funded target can't be deleted out from under its money.
 - **Swaps** — testnet: best quote across Synthra fee tiers; mainnet: LI.FI, the aggregator behind the Arc Portal's swap page. Quotes refresh every 20s, with a 0.5% slippage guard and a re-quote just before signing. LI.FI returns a ready-made transaction, so Vlora decodes and checks it (pinned router, receiver = you, exact input, output token, on-chain minimum) before it can be signed.
-- **Gasless USDC sends** — when the server has a Circle API key, USDC sends offer a *Gasless* toggle: you sign an EIP-3009 authorization (no transaction), and [Circle's Facilitator Service](https://developers.circle.com/facilitator-service) submits it and pays the network fee. See [Gasless sends](#gasless-sends-circle-facilitator).
-- **Cash out to a bank** — type it: "cash out 20 USDC to gtbank 0123456789" resolves the bank, checks the account name and asks once. `/cashout` browses the same thing. It turns USDC into naira, Kenyan shillings, Ugandan shillings or Tanzanian shillings, paid into a bank account by [Paycrest](https://paycrest.io). See [Cashing out](#cashing-out-paycrest).
-- **Earn** — `/earn` lends idle USDC in an Arc vault through Circle's App Kit; the vault holds the funds, and withdrawals are yours to make at any time.
-- **Airtime, data and bills** — type it: "buy 500 airtime for 08012345678" works out the network from the number itself; "pay 5000 electricity for meter 04123456789 on ikeja" pays a disco. `/airtime`, `/data`, `/electricity` and `/tv` browse the catalogue. Paid with USDC, delivered by [Bitrefill](https://www.bitrefill.com). See [Airtime and bills](#airtime-and-bills-bitrefill).
-- **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded. It can also read this wallet's whole past off Arc in one press (`src/lib/backfillHistory.ts`): a binary search over archive state finds where the wallet's history begins, then the scan works through it, adding rows as it finds them.
 - **Batch payments** — `send 10 USDC to 0xA, 25 to 0xB` or a CSV. One all-or-nothing transaction through `BatchSender`; rows are editable in the preview.
+- **Move everything** — "send all my assets to 0x…" sweeps every token in one confirmed run, behind a review screen that shows each token and amount and makes you type the last four characters of the destination back.
+- **History and receipts** — `/history` lists payments, swaps, bridges, cash-outs and bills, filtered by date, and turns any of them into a PNG receipt you can download or share. Generated in the browser; nothing is uploaded. It can also read this wallet's whole past off Arc in one press (`src/lib/backfillHistory.ts`): a binary search over archive state finds where the wallet's history begins, then the scan works through it in 5,000-block chunks, adding rows as it finds them.
+- **Where the money went** — `/activity` answers with the chart itself, in the chat: spending by day, week or month, broken down by kind. The same page exports a CSV or a printable statement.
+- **Agent wallet (beta)** — `/agent` and the AI acts from a sub-account you fund, within limits the contract enforces; `/exit` returns to normal mode. It can send, and (on mainnet, with Bitrefill configured) buy a bill using a number from your own message. See [Why the agent can't drain you](#why-the-agent-cant-drain-you).
+- **Sign in without a wallet** — with Privy configured, email or Google creates an embedded wallet on the spot; people who already have a wallet still connect theirs. Both paths behave the same everywhere in the app.
+- **Gasless USDC sends** — when the server has an entitled Circle API key, USDC sends offer a *Gasless* toggle: you sign an EIP-3009 authorization (no transaction), and [Circle's Facilitator Service](https://developers.circle.com/facilitator-service) submits it and pays the network fee. Not working on this account yet — see [Gasless sends](#gasless-sends-circle-facilitator).
 - **Contacts and templates** — `save 0x… as alice`, then `pay alice 5`. Stored in your browser only.
 - **Payment links** — `request 25 USDC` gives a link that prefills a send for the payer, who still reviews and signs.
 - **Live progress** — every transaction shows sign → approve (if needed) → confirm, and always ends with success, a revert reason, "never broadcast", or an explorer link.
-- **Also** — plain-language commands with a `/` quick-action menu, and light/dark themes.
+- **Also** — a `/` quick-action menu, and light/dark themes.
 
 ## Tech
 
@@ -72,22 +100,30 @@ React 18 · Vite · TypeScript · Tailwind · wagmi v2 / viem · ConnectKit · F
 
 ```
 src/
-  App.tsx                chat, command routing, transaction flows
-  utils/intentParser.ts  command parsing (no LLM)
+  App.tsx                chat, tabs, command routing, transaction flows
+  utils/intentParser.ts  send/swap/batch command parsing (no LLM)
+  utils/moneyIntent.ts   cash-out, bills, earn, targets, sweep — same idea, money commands
   utils/validateSend.ts  pre-sign validation (send, batch, swap, names)
   hooks/useTxPreview.ts  on-chain dry run + fee estimate
   lib/watchTx.ts         receipt watcher (success / reverted / dropped / timeout)
   lib/swapQuote.ts       swap quotes: Synthra QuoterV2 (testnet), LI.FI (mainnet)
   lib/lifi.ts            LI.FI quote fetch + calldata verification
   lib/gasless.ts         EIP-3009 signing + Circle settlement client
+  lib/bridge.ts          Arc → Base via App Kit + CCTP, with the exact-amount gross-up
+  lib/runMoney.ts        one runner for every typed money command
+  lib/earn.ts            Arc lending vaults · lib/savings.ts  named targets inside them
+  lib/activity.ts        the log every feature writes to · lib/receipt.ts  PNG receipts
+  lib/backfillHistory.ts reads this wallet's past off Arc in 5,000-block chunks
+  lib/insights.ts        buckets the log · lib/statement.ts  CSV + printable statement
   chain-env.ts           testnet ⇄ mainnet switch (IS_MAINNET)
   tokens.ts · swap-config.ts · batch-config.ts · arcnames-config.ts · agent-config.ts
 contracts/
   BatchSender.sol        multi-recipient ERC-20 payouts (no owner, never holds funds)
   AgentVault.sol         agent wallet + factory
+  Fundraiser.sol · TeamUp.sol · Treasury.sol   written and tested, not wired into the app
   test/                  Foundry tests
-server/                  agent + gasless API source — handlers shared by local + Vercel
-api/agent/ · api/gasless/   Vercel Functions
+server/                  agent, gasless, off-ramp and bills API source — shared by local + Vercel
+api/<area>/[route].js    one Vercel Function per area (the Hobby plan allows 12 in total)
 api/_lib/                generated bundle of server/*.ts used by the functions
 scripts/build-agent-api.mjs   builds that bundle (runs in `npm run build`)
 ```
@@ -225,7 +261,7 @@ Set it in `server/.env` (local, with `npm run agent`) or in Vercel's environment
 
 ## Cashing out (Paycrest)
 
-`/cashout` sends USDC out to a bank account in local currency. Paycrest's providers pay the bank; Vlora holds nothing and signs nothing on the user's behalf.
+Type "cash out 20 USDC to gtbank 0123456789", or browse the same thing with `/cashout`. Paycrest's providers pay the bank; Vlora holds nothing and signs nothing on the user's behalf. **This has run end to end on mainnet** — USDC on Arc, naira in the bank account.
 
 Paycrest settles on Base, Polygon, Arbitrum and a few other networks — **not on Arc yet**. So a cash-out is: create the order (`server/offramp.ts`), then bridge exactly what it asks for to the order's receive address on Base (`src/lib/bridge.ts`, Circle App Kit + CCTP). Two details keep that to a single signature on Arc:
 
@@ -293,7 +329,7 @@ moves money.
 
 ## Airtime and bills (Bitrefill)
 
-`/airtime`, `/data`, `/electricity` and `/tv` buy a top-up or pay a biller with USDC. Bitrefill quotes the invoice, takes the payment in USDC **on Base**, and delivers straight to the phone number or meter — no code to redeem.
+`/airtime`, `/data`, `/electricity` and `/tv` buy a top-up or pay a biller with USDC — or just type it. **Airtime has run end to end on mainnet twice**, delivered to the phone. Bitrefill quotes the invoice, takes the payment in USDC **on Base**, and delivers straight to the phone number or meter — no code to redeem.
 
 Paying it is the same primitive as a cash-out: the invoice gives an address and an exact price, and `src/lib/bridge.ts` delivers it from the Arc wallet in one signature. `server/bills.ts` holds the key, caches the catalogue for ten minutes (Bitrefill asks integrators to cache, and their limits are tight), and checks the invoice that comes back — USDC, a real address, inside the ceiling — before the app pays anything.
 

@@ -205,8 +205,8 @@ export function parseSweep(input: string): SweepIntent | null {
 export interface EarnIntent {
   type: 'earn';
   action: 'deposit' | 'withdraw';
-  /** Whole USDC, or "all" for everything in the vault */
-  amount: string | 'all';
+  /** Whole USDC, or the literal "all" for everything in the vault */
+  amount: string;
 }
 
 /**
@@ -245,36 +245,44 @@ export function parseEarn(input: string, onEarnTab = false): EarnIntent | null {
   };
 }
 
-/** A date written the way people write one: "30th October", "30 Oct", "2026-10-30" */
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * A date written the way people write one: "30th October", "30 Oct", "oct 10 2026",
+ * "2026-10-30".
+ *
+ * A sentence about money carries other numbers — "total amount is 2 usdc" looks
+ * exactly like "2 <month>" to a regex — so every candidate is tried and the first
+ * one naming a real month wins, instead of the first one matching and then failing.
+ */
 export function parseWhen(text: string, now = new Date()): number | null {
-  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  const iso = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (iso) {
-    const at = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00`).getTime();
-    return Number.isFinite(at) ? at : null;
+    const at = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 12, 0, 0);
+    return Number.isFinite(at.getTime()) ? at.getTime() : null;
   }
 
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  // "30th October", "30 oct", "october 30"
-  const dayFirst = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b/i);
-  const monthFirst = text.match(/\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
-  const found = dayFirst
-    ? { day: Number(dayFirst[1]), month: (dayFirst[2] ?? '').toLowerCase() }
-    : monthFirst
-      ? { day: Number(monthFirst[2]), month: (monthFirst[1] ?? '').toLowerCase() }
-      : null;
-  if (!found) return null;
-
-  const month = months.findIndex((m) => found.month.startsWith(m));
-  if (month < 0 || found.day < 1 || found.day > 31) return null;
-
-  // A date already gone means next year: "30 October" said in November is 2027
-  let year = now.getFullYear();
-  const at = new Date(year, month, found.day, 12, 0, 0);
-  if (at.getTime() < now.getTime()) {
-    year += 1;
-    at.setFullYear(year);
+  const candidates: { day: number; month: string; year?: number }[] = [];
+  // "30th October 2026", "30 oct", "30th of oct"
+  for (const m of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:,?\s*(\d{4}))?/gi)) {
+    candidates.push({ day: Number(m[1]), month: (m[2] ?? '').toLowerCase(), year: m[3] ? Number(m[3]) : undefined });
   }
-  return at.getTime();
+  // "october 30", "oct 10 2026"
+  for (const m of text.matchAll(/\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s*(\d{4}))?/gi)) {
+    candidates.push({ day: Number(m[2]), month: (m[1] ?? '').toLowerCase(), year: m[3] ? Number(m[3]) : undefined });
+  }
+
+  for (const found of candidates) {
+    const month = MONTHS.findIndex((m) => found.month.startsWith(m));
+    if (month < 0 || found.day < 1 || found.day > 31) continue;
+
+    const at = new Date(found.year ?? now.getFullYear(), month, found.day, 12, 0, 0);
+    if (at.getMonth() !== month) continue; // "31 Feb" is not a date
+    // A date already gone means next year — unless the year was spelled out
+    if (found.year == null && at.getTime() < now.getTime()) at.setFullYear(at.getFullYear() + 1);
+    return at.getTime();
+  }
+  return null;
 }
 
 export interface SavingsGoalIntent {
@@ -284,27 +292,72 @@ export interface SavingsGoalIntent {
   due: number | null;
 }
 
+/** Words that are never a target's name, however the sentence is written */
+const NOT_A_NAME = /^(a|an|the|my|our|it|this|that|new|for|of|to|is|called|named|target|goal|saving|savings)$/i;
+
+/** Where a target's name stops: punctuation, a money word, a date word, or a digit */
+const NAME_END = /\s*(?:,|\.|;|$|\b(?:total|cap|amount|worth|limit|is|of|due|by|on|before|deadline|date|time|and|with)\b|\d)/;
+
 /**
- * "create target for rent, total is 1 USDC, due 30th October".
+ * What the person called their target. They write it four or five different
+ * ways, so each shape is tried in turn and the first that yields a real word
+ * wins.
+ */
+function nameFrom(text: string): string | null {
+  const shapes = [
+    // "called rent", "named school fees"
+    /\b(?:called|named|name)\s+"?([a-z0-9][a-z0-9 '&-]{0,39}?)"?(?=SPOT)/i,
+    // "target for rent", "saving for a car"
+    /\bfor\s+(?:a|an|the|my)?\s*([a-z0-9][a-z0-9 '&-]{0,39}?)(?=SPOT)/i,
+    // "create a rent target" — the name sits in front of the word
+    /\b(?:create|new|make|set|start|open|add)\s+(?:up\s+)?(?:a|an|the|my)?\s*([a-z0-9][a-z0-9 '&-]{0,39}?)\s+(?:target|goal)\b/i,
+    // "new target rent" — and behind it
+    /\b(?:target|goal)\s+(?!called|named|for|of|is|to|at|with)([a-z0-9][a-z0-9 '&-]{0,39}?)(?=SPOT)/i,
+  ];
+  for (const shape of shapes) {
+    const filled = new RegExp(shape.source.replace('SPOT', () => NAME_END.source), 'i');
+    const name = text.match(filled)?.[1]?.trim().replace(/^(?:a|an|the|my|our|new)\s+/i, '');
+    if (name && !NOT_A_NAME.test(name)) return name;
+  }
+  return null;
+}
+
+/**
+ * How much a target is for. A sentence about a target carries two or three
+ * numbers — the amount, the day, sometimes a year — so the amount is the one
+ * wearing a currency, or the one a money word introduces, and only as a last
+ * resort a bare number that plainly belongs to no date.
+ */
+function amountFrom(text: string): string | null {
+  const withCurrency = text.match(/(?:\$\s*)?(\d[\d,]*(?:\.\d+)?)\s*(?:usdc|usd|dollars?)\b|\$\s*(\d[\d,]*(?:\.\d+)?)/i);
+  const introduced = text.match(/\b(?:cap|total|amount|worth|limit|goal|target|save|of)\s+(?:is\s+|at\s+|of\s+|to\s+)?(\d[\d,]*(?:\.\d+)?)/i);
+  const plain = text.match(
+    /\b(\d[\d,]*(?:\.\d+)?)\b(?!\s*(?:st|nd|rd|th)\b)(?!(?:st|nd|rd|th)\b)(?!\s+(?:of\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))/i,
+  );
+  const raw = withCurrency?.[1] ?? withCurrency?.[2] ?? introduced?.[1] ?? plain?.[1];
+  if (!raw) return null;
+  const amount = raw.replace(/,/g, '');
+  return Number(amount) > 0 ? amount : null;
+}
+
+/**
+ * "create target for rent, total is 1 USDC, due 30th October", or
+ * "create a target called rent, the cap is 100 usdc and the deadline is 30th of oct".
  *
- * The name is whatever sits between "for" and the amount, which is how people
- * write it. A target with no amount is not a target, so that is required.
+ * A target with no amount is not a target, so that much is required; a date is
+ * optional.
  */
 export function parseSavingsGoal(input: string): SavingsGoalIntent | null {
   const text = input.trim();
   if (!/\b(target|goal|saving|save)\b/i.test(text)) return null;
-  if (!/\b(create|new|add|set|start|make|save)\b/i.test(text)) return null;
+  if (!/\b(create|new|add|set|start|make|save|open)\b/i.test(text)) return null;
   // "add 5 to rent" is a contribution, not a new target
   if (/\badd\b[^.]*\bto\b/i.test(text) && !/\b(target|goal)\b/i.test(text.split(/\bto\b/i)[0] ?? '')) return null;
 
-  const amountMatch = text.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:usdc|usd|\$)?/i);
-  if (!amountMatch) return null;
-  const amount = (amountMatch[1] ?? '').replace(/,/g, '');
-  if (Number(amount) <= 0) return null;
+  const amount = amountFrom(text);
+  if (!amount) return null;
 
-  // The name: after "for", up to the amount or a "total"/"due"/date word
-  const forMatch = text.match(/\bfor\s+([a-z0-9][a-z0-9 '&-]{0,39}?)(?=\s*(?:,|\.|total|amount|is|of|worth|due|by|on|before|\d|$))/i);
-  const name = forMatch?.[1]?.trim();
+  const name = nameFrom(text);
   if (!name) return null;
 
   return { type: 'savings_goal', name, amount, due: parseWhen(text) };

@@ -96,7 +96,10 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
   const latestLegacy = allLegacy[allLegacy.length - 1];
   const [creatingNew, setCreatingNew] = useState(false);
   const currentVault = vaults && vaults.length > 0 ? vaults[vaults.length - 1] : undefined;
-  const vault = currentVault ?? (creatingNew ? undefined : latestLegacy);
+  // "Create a new one" has to escape an existing vault too, not just a legacy one:
+  // an owner who revoked theirs, or wants a second with different limits, was
+  // otherwise shown the old vault forever with no way back to the form.
+  const vault = creatingNew ? undefined : (currentVault ?? latestLegacy);
 
   // Mixed ABIs in one multicall; results are read back through the typed read() helper
   const { data: state, refetch: refetchState } = useReadContracts({
@@ -198,6 +201,15 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
     return (
       <section className="rounded-3xl border border-line/10 bg-surface/80 p-5 backdrop-blur">
         {header}
+        {creatingNew && (currentVault ?? latestLegacy) && (
+          <button
+            type="button"
+            onClick={() => setCreatingNew(false)}
+            className="mt-3 text-xs font-semibold text-brand underline"
+          >
+            ← Back to your current agent wallet
+          </button>
+        )}
         {agentAddress === null && (
           <p className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
             The agent server isn't reachable. Locally, start it with <span className="mono">npm run agent</span>; on Vercel, set
@@ -341,6 +353,15 @@ export function AgentPanel({ onVaultChange, collapsible = false, open: openProp,
       {revoked && agentAddress && (
         <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
           The agent is revoked — it can't act. Click <strong>Re-enable</strong> to trust the server's agent again for {DEFAULT_EXPIRY_DAYS} days.
+        </p>
+      )}
+      {!legacyVault && (
+        <p className="mt-3 text-[11px] text-subtle">
+          Want different limits?{' '}
+          <button type="button" onClick={() => setCreatingNew(true)} className="font-semibold text-brand underline">
+            Create another agent wallet
+          </button>
+          . This one stays, with its money in it.
         </p>
       )}
 

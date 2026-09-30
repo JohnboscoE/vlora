@@ -97,6 +97,9 @@ function escape(text: string): string {
   return text.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c);
 }
 
+// Async because every caller awaits it and a future format may need to be; the
+// two we have both finish synchronously.
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function downloadStatement(request: StatementRequest): Promise<void> {
   if (request.entries.length === 0) throw new Error('There is nothing in this period to put on a statement.');
 

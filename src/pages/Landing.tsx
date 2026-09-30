@@ -60,8 +60,11 @@ const TODAY = [
   ...(agentLive ? ['Agent wallet (beta): the AI pays within limits you set'] : []),
   ...(cashOutLive ? ['Cash out to a bank account in naira, shillings and more'] : []),
   ...(cashOutLive ? ['Earn on idle USDC in an Arc lending vault'] : []),
-  ...(cashOutLive ? ['Airtime, data and electricity bills paid with USDC'] : []),
+  ...(cashOutLive ? ['Savings targets that earn while they wait'] : []),
+  ...(cashOutLive ? ['Airtime, data, electricity and TV paid with USDC'] : []),
+  'Move every token to one wallet in a single confirmed run',
   'History with a receipt you can download or share',
+  'Spending by day, week or month, and a statement you can export',
   'Every transaction simulated and confirmed before you sign',
 ];
 // What Vlora is built with (tools and networks, not partnerships)
@@ -71,7 +74,7 @@ const AGENT_LAYERS = [
   {
     title: 'Recipients come from you',
     meta: 'Prompt-injection guard',
-    body: 'The agent can only pay an address or .arc name you typed in that message. Text it reads elsewhere can’t redirect funds.',
+    body: 'The agent can only pay an address or .arc name you typed yourself. Text it reads elsewhere — a page, a name record, its own reply — can’t redirect funds.',
   },
   {
     title: 'Checked on the server',

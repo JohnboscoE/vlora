@@ -1590,7 +1590,11 @@ export default function App() {
     if (thinkingRef.current) return;
     // Commands that open a tab handle their own navigation
     if (handleModeCommand(text)) return;
-    if (agentMode && agentVault?.active) return handleAgentMessage(text);
+    // A savings target is bookkeeping in this browser and a deposit you sign
+    // yourself — the agent has no tool for either, so in agent mode it could only
+    // apologise. Handle those here whichever mode is on.
+    const aboutATarget = parseSavingsGoal(text) != null || parseSavingsMove(text) != null;
+    if (agentMode && agentVault?.active && !aboutATarget) return handleAgentMessage(text);
     // A typed action does what the tab's buttons do, and the reply appears on
     // the tab it was typed on — every tab keeps its own thread
     if (await handleMoneyMessage(text)) return;
@@ -2048,6 +2052,12 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                   )}
                   {tab === 'next' && <ComingSoon />}
 
+                  {/* Always mounted: this is what finds the vault behind the agent toggle */}
+                  {!wrongChain && (
+                    <div className={tab === 'wallet' ? undefined : 'hidden'}>
+                      <AgentPanel onVaultChange={onAgentVaultChange} />
+                    </div>
+                  )}
                   {/* This tab's own thread: what was said here, answered here */}
                   {tabMessages.length > 0 && (
                     <div className="mt-4 space-y-4 border-t border-line/10 pt-4">
@@ -2055,12 +2065,6 @@ Or just tell them to pay you at ${myArcName}.` : ''}`,
                         <ChatMessage key={msg.id} msg={msg} />
                       ))}
                       <AnimatePresence>{isThinking && <TypingBubble key="typing-tab" />}</AnimatePresence>
-                    </div>
-                  )}
-                  {/* Always mounted: this is what finds the vault behind the agent toggle */}
-                  {!wrongChain && (
-                    <div className={tab === 'wallet' ? undefined : 'hidden'}>
-                      <AgentPanel onVaultChange={onAgentVaultChange} />
                     </div>
                   )}
                 </>

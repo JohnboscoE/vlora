@@ -231,6 +231,30 @@ describe('parseSavingsGoal', () => {
   it('leaves other commands alone', () => {
     expect(parseSavingsGoal('buy 500 airtime for 08012345678')).toBeNull();
   });
+
+  // The sentence a real person typed, which the first parser refused outright
+  it('reads a target that was "called" something', () => {
+    const goal = parseSavingsGoal('create a target called rent, the cap is 100 usdc and the time/date/deadline is 30th of oct');
+    expect(goal).toMatchObject({ name: 'rent', amount: '100' });
+    const due = new Date(goal?.due ?? 0);
+    expect(due.getMonth()).toBe(9);
+    expect(due.getDate()).toBe(30);
+  });
+
+  it('never reads the day of the month as the amount', () => {
+    expect(parseSavingsGoal('new target named school fees, 250 usdc, due 30th of oct')).toMatchObject({ amount: '250' });
+    expect(parseSavingsGoal('create target called car by 12 December, cap 40 USDC')).toMatchObject({ name: 'car', amount: '40' });
+  });
+
+  it('reads the name in front of the word too', () => {
+    expect(parseSavingsGoal('create a rent target of 100 usdc')).toMatchObject({ name: 'rent', amount: '100' });
+    expect(parseSavingsGoal('new target rent 100 usdc')).toMatchObject({ name: 'rent', amount: '100' });
+  });
+
+  it('does not mistake the verb for the name', () => {
+    const goal = parseSavingsGoal('create a target called rent, 100 usdc');
+    expect(goal?.name).toBe('rent');
+  });
 });
 
 describe('parseSavingsMove', () => {

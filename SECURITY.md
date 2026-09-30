@@ -10,7 +10,7 @@ Status: tested (Foundry unit, fuzz and invariant tests; Vitest for the off-chain
 flowchart LR
   U[Owner's message] -->|typed recipients + amounts| G
   M[Claude, untrusted] -->|tool calls| G[Server guards<br/>server/guards.ts]
-  X[Untrusted text<br/>chat history, pasted text,<br/>name records, tool output] -.->|can influence| M
+  X[Untrusted text<br/>name records, fetched pages,<br/>tool output, the model's own replies] -.->|can influence| M
   G -->|agentTransfer / agentSwap<br/>signed by the agent key| V[AgentVault<br/>on-chain caps]
   O[Owner wallet] -->|withdraw · pause · revoke · limits| V
   V -->|at most perDay per token<br/>in any 24h| R[Recipient]
@@ -22,7 +22,7 @@ Everything left of the vault can be wrong or hostile; the vault's limits still h
 
 | Input | Why it can't move funds on its own |
 |---|---|
-| The model's output (Claude) | It only proposes tool calls. The server executes a send only if the recipient appears in the owner's **latest** message (address or `.arc` name), the amount parses, and it fits the limits. |
+| The model's output (Claude) | It only proposes tool calls. The server executes a send only if the recipient appears in something the **owner typed** — this message or an earlier turn of their own (address or `.arc` name) — the amount parses, and it fits the limits. Assistant turns and tool results are never passed to the guard. |
 | Chat history, pasted text, web content, `.arc` records | Only the latest owner message is scanned for recipients (`RecipientGuard`). A name the model looks up but the owner didn't type never becomes payable. A 64-hex hash doesn't make its prefix an address. |
 | Quotes from LI.FI (mainnet swaps, main app) | The returned transaction is decoded and checked before signing: pinned router, receiver = the user, exact input token and amount, output token, on-chain minimum = reviewed minimum (`src/lib/lifi.ts`). The user still signs it. |
 | RPC responses | Used for previews and dry runs. A lying RPC can make a preview wrong, but it can't sign anything: every main-app transaction is signed by the user's wallet, and the vault enforces its own caps. If the chain can't be read, signing is blocked (fail-closed). |
@@ -51,7 +51,7 @@ v2 factories are live on both networks (see the README); new agent wallets get t
 | Total agent spend in any 24h ≤ `perDay`, including across midnight | `invariant_NeverMoreThanCapInAny24Hours` (Foundry invariant, 256 runs × 500 calls with random time jumps). Against the v1 contract this invariant **fails** (101.97 > 100 USDC), so it catches the bug it was written for. |
 | Window accounting is consistent | `invariant_WindowAccountingAddsUp`, `test_NoMidnightReset_RollingWindow`, `test_WindowReleasesSpendsOneByOne`, `test_TooManySpendsInWindow_NeverForgetsALiveSpend` |
 | Agent can't use owner controls, strangers can't act, paused/expired/revoked agents are blocked, swaps pay out to the vault and clear approvals | `contracts/test/AgentVault.t.sol` |
-| Recipients must come from the owner's latest message; model-suggested names rejected | `server/guards.test.ts` |
+| Recipients must come from what the owner typed; model-suggested names and addresses rejected | `server/guards.test.ts` |
 | Server caps (per-tx, 24h, beta cap, v1 midnight guard) | `server/guards.test.ts` |
 | Every send is validated and fails closed without a balance | `src/utils/validateSend.test.ts` |
 
