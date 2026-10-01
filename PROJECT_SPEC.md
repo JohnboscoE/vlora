@@ -1,94 +1,107 @@
 # Vlora — Project Spec
 
+> Scope, honest status, and the Arc Microgrants submission plan.
+> Last rewritten 2026-10-01. If this file and the code disagree, the code is right — fix this file.
+
+## Vision
+
+**Vlora is a dollar account you operate by typing, on a chain you never have to think about, that ends in a real bank account and a real phone.**
+
+Everything below is in service of that one sentence. The three clauses are each a constraint:
+
+- *Operate by typing* — the interface is a sentence, not a form, a token picker or an address pasted twice to be sure.
+- *A chain you never have to think about* — Arc is chosen because USDC **is** the gas. One token to hold, about a cent per transfer, seconds to settle. No second asset to buy before you can spend the first, no network to add, no bridge to understand.
+- *Ends in a real bank account and a real phone* — a transfer that lands at another address is a crypto app. Naira in a bank and airtime on a handset is money. This is the line the project is judged against.
+
 ## What this app is
 
-A chat-style web app where a user types a plain-English money command and,
-after an explicit confirm step, it executes on the Arc chain. Built on the
-Arc Studio scaffold (React + Vite + TypeScript, wagmi/viem, Circle wallet
-plumbing already wired for USDC).
+A chat-style web app on [Arc](https://arc.io). You type a plain-English money command; a deterministic parser works out what you meant; validation, an on-chain dry run and a confirmation sheet stand between that and your wallet. Seven tabs give each area a home, but a tab is a shortcut — the same sentence works from anywhere, and the chat and the panels call the same runner (`src/lib/runMoney.ts`). Keep it that way.
 
-**Important framing note:** the "prompt parsing" is regex-based pattern
-matching (`src/utils/intentParser.ts`), not an LLM. Don't describe this to
-judges/reviewers as AI-powered unless an LLM is actually added — the code is
-easy to read and this claim wouldn't survive a technical review.
+**Framing note, still the most important line in this file:** the main chat's "prompt parsing" is regex pattern matching (`src/utils/intentParser.ts`, `src/utils/moneyIntent.ts`), **not an LLM**. Do not describe the app as AI-powered. The code is short and easy to read, and that claim would not survive a technical review.
 
-## What currently works
+The one exception is **agent mode**, where an AI model (Claude Haiku 4.5, server-side) spends from a sub-account the user funded, inside limits a smart contract enforces. That is the only place a model touches money.
 
-- **Send USDC**: type "send 10 USDC to 0x...", get a preview card, tap
-  Execute, wallet prompts, `erc20Abi.transfer` fires on-chain. This is the
-  only intent that actually executes a transaction today.
-- **Balance check**: reads the connected wallet's USDC balance, no tx.
-- **Intent preview/confirm gate**: every actionable command shows a
-  confirmation sheet (`IntentPreview.tsx`) before anything is signed. The
-  Execute button is disabled for unrecognized commands and for sends with no
-  valid recipient address (re-validated with `isAddress()` at confirm time,
-  not just at parse time).
+- Live: **https://vlora-two.vercel.app** on Arc mainnet
+- Repo: **https://github.com/JohnboscoE/vlora** (public)
 
-## What is NOT built yet (stubs only)
+## Status — what has actually moved money
 
-- **Swap**: parsed and previewed, but confirming just shows an info message
-  ("requires a deployed AMM on Arc"). No DEX integration exists.
-- **Add liquidity**: same — parsed and previewed, no pool contract wired up.
-- **Dapp discovery/directory**: there is no registry of other dapps deployed
-  on Arc. Today this app only talks to its own USDC transfer path — it does
-  not navigate or aggregate third-party protocols. If the end goal is "help
-  users discover and use dapps across the Arc ecosystem," that layer doesn't
-  exist yet and is the largest piece of remaining work.
+On Arc **mainnet**, with real funds:
 
-## Testnet vs mainnet — how it's wired
+- Sends (USDC, EURC, cirBTC), swaps, batch payments, `.arc` names, Earn deposits and withdrawals
+- **Cash out to a bank** — one order completed end to end: USDC on Arc → naira received
+- **Airtime** — two top-ups completed end to end, delivered to the phone
+- History, PNG receipts, the spending chart and the statement, all built from those real transactions
 
-All chain-specific values (chain id, RPC URL, explorer URL, USDC address,
-display name) are centralized in `src/chain-env.ts`, which reads from the
-generated `src/onchain-facts.ts` registry (which already has both Arc
-Testnet — chain id 5042002 — and Arc mainnet — chain id 5042 — correctly
-defined, including matching USDC addresses on both).
+Shipped and tested but **not yet proven end to end** — the app says so itself rather than pretending:
+
+- The agent buying a bill from its own vault (the vault → agent key → bridge path has failed once at the bridge)
+- Gasless sends (Circle's Facilitator returns 403 on this account; the keyless trial is the intended fix and is not wired yet)
+
+Written, unit-tested and **deliberately not in the app**: `Fundraiser.sol`, `TeamUp.sol`, `Treasury.sol`. Real contracts with passing tests, held back because shipping unaudited group-custody UI is more scope than this deserves. Mentioning them is fine; implying they are live is not.
+
+**Tests:** 141 TypeScript tests (`npm run test`, 7 files) and 90 Foundry tests across 6 suites, all passing — including an `AgentVault` invariant run that drives a hostile agent through random spends and time jumps and checks no 24-hour window ever exceeds the cap. Run against the first contract version, which reset at midnight, it fails; that is how the bug was found.
+
+## Why payments leave Arc, and come back
+
+Paycrest (bank payout) and Bitrefill (airtime, data, electricity, TV) both settle on **Base** and neither lists Arc yet. Rather than make that the user's problem, the app carries it: it asks the provider for an invoice, then bridges **only that amount** from Arc to the invoice's address via Circle's CCTP through App Kit. One signature on Arc, no ETH, no added network, and the balance stays on Arc.
+
+This is a detour, not a design. When either provider lists Arc, a constant changes (`NETWORK` in `server/offramp.ts`, or the payment method in `server/bills.ts`) and the bridge step disappears — the rest is already written against "pay this address this much".
+
+## Why the agent can't drain you
+
+The model is treated as untrusted. Four independent layers:
+
+1. **Recipients come from the user, not the model** — only an address, `.arc` name, phone or meter number the owner typed themselves, in this message or an earlier turn of their own. Assistant replies and tool results are never counted, which closes the prompt-injection path.
+2. **Deterministic server checks** — amount, per-transaction limit, remaining 24-hour allowance, and a dry run of the exact call. At most 5 actions per message.
+3. **On-chain caps in `AgentVault`** — per-token per-transaction and **rolling 24-hour** limits (no midnight reset), expiry, pause and revoke, enforced by the contract even if the server and its key are fully compromised.
+4. **The owner stays the owner** — withdraw, pause or revoke from their own wallet at any time; the agent key can never withdraw.
+
+Worst case: a compromised key or a manipulated model moves at most the daily limit per token in any 24-hour period, never the whole balance. Mainnet defaults are 2 USDC per transaction and 5 per day, with the server refusing any vault above a 50 USDC/day beta cap.
+
+**`AgentVault` is tested, Sourcify-verified and _not audited_.** Say so every time it comes up. One shared agent key serves every vault on the hosted site; per-vault keys would remove that and are not built.
+
+## Testnet vs mainnet
+
+Chosen at **build time** by an environment variable, not by editing a constant:
 
 ```ts
 // src/chain-env.ts
-export const IS_MAINNET = false; // <-- the only line to flip
+export const IS_MAINNET = import.meta.env.VITE_ARC_NETWORK === 'mainnet';
 ```
 
-Everything else (`config.ts`, `App.tsx`, `BalanceBar.tsx`,
-`IntentPreview.tsx`) now derives from `ACTIVE_CHAIN_ID` / `ACTIVE_CHAIN`
-instead of hardcoded testnet constants or literal "Arc Testnet" strings. No
-other file should need manual editing to move between networks.
+Set `VITE_ARC_NETWORK=mainnet` on the production deploy; anything else is Arc Testnet (5042002). Every chain-specific value — chain id, RPC, explorer, USDC address, display name — derives from `ACTIVE_CHAIN_ID` / `ACTIVE_CHAIN`, built from the generated `src/onchain-facts.ts`. **Nothing else should hardcode a chain.**
 
-**Workflow:** build and test everything with `IS_MAINNET = false` (near-zero
-testnet gas cost). Only flip to `true` for the final mainnet verification
-run and the submission itself. Arc mainnet gas is roughly $0.01/tx, so a
-couple of confirmation sends to check it actually works live is cheap.
+Build and test on testnet, where gas is free. Mainnet gas is about a cent per transaction, so a live verification run is cheap — but cash out and bills are mainnet-only (Paycrest and Bitrefill have no test networks), so those can only ever be proven with real money.
 
-## What this needs to achieve (Arc Microgrants submission)
+## Arc Microgrants submission
 
-Target: [Arc Microgrants](https://arc.io) — $500 USDC, non-dilutive,
-deadline **Oct 14, 2026**, decisions by Oct 21.
+Target: [Arc Microgrants](https://arc.io) — $500 USDC, non-dilutive. Deadline **Oct 14, 2026**, decisions by Oct 21.
 
-Submission requirements this project must satisfy:
-- [ ] Deployed and working on **Arc mainnet** (not testnet) at submission time
-- [ ] Public repo
-- [ ] Short description of what it does and what it uses Arc for
-- [ ] Public builder profile (GitHub/X/Farcaster)
-- [ ] At least one real, working on-chain action (send already qualifies —
-      swap/LP do not need to be finished for eligibility, but see below on
-      how they affect scoring)
+| Requirement | Status |
+|---|---|
+| Deployed and working on Arc **mainnet** at submission time | ✅ live, with real transactions through it |
+| Public repo | ✅ github.com/JohnboscoE/vlora |
+| Short description of what it does and what it uses Arc for | ✅ README opening; the vision sentence above is the short form |
+| Public builder profile (GitHub / X / Farcaster) | ⬜ confirm before submitting |
+| At least one real, working on-chain action | ✅ several, including a completed bank payout and two airtime top-ups |
 
-Scoring criteria stated by the program: relevance to Arc, technical
-credibility, quality of what's built, and whether it's "worth taking
-further." Implication: a submission that's honest about being "send +
-balance check today, swap/LP and dapp discovery planned next" reads better
-than one that implies swap/LP already work and gets caught out by a judge
-reading the code.
+Stated scoring criteria: relevance to Arc, technical credibility, quality of what is built, and whether it is worth taking further.
 
-## Suggested next steps, in order
+**What leads, and in what order.** Relevance to Arc is the bank payout and the airtime top-up — real money reaching a Nigerian bank and a Nigerian phone, from a chain where USDC is the gas. Technical credibility is the agent vault: *an AI agent that can spend your USDC but provably can't drain it*, with an invariant test that found a real bug in its own first version. Quality is the honesty — the app names what each unbuilt thing is blocked by, and says out loud what has not been proven.
 
-1. Finish testing send + balance on testnet (`IS_MAINNET = false`).
-2. Get a small amount of mainnet USDC into the test wallet, flip
-   `IS_MAINNET = true`, run one real send + balance check on Arc mainnet to
-   confirm the mainnet chain config actually works end to end.
-3. Decide submission scope honestly: submit as-is ("send + balance, on
-   Arc mainnet, swap/LP previewed but not yet executable") or invest more
-   time wiring a real swap route before Oct 14.
-4. If pursuing the "navigate available dapps" framing from the original
-   concept, that's net-new scope: a registry/list of Arc dapps plus
-   whatever read (and optionally write) integration each one needs. Treat
-   this as a separate milestone, not a rename of what exists today.
+**Claim rules.** These are the ones a reviewer could catch:
+
+- ❌ Do not call the app AI-powered. Only agent mode uses a model.
+- ❌ Do not present the agent buying a bill, or gasless sends, as working.
+- ❌ Do not imply `Fundraiser`, `TeamUp` or `Treasury` are usable in the app.
+- ❌ Do not call `AgentVault` audited.
+- ✅ Do say cash out and airtime have completed live on mainnet with real funds.
+- ✅ Do say the parser is deterministic — it is a feature, not an apology.
+
+## Next steps, in order
+
+1. **Keep `README.md` and this file true.** They are the first two things a judge reads, and the project's strongest card is that it does not overstate itself. A stale spec undoes that in one paragraph.
+2. **Prove one of the two unproven paths**, if time allows before Oct 14 — the agent buying a bill is the more impressive of the two, and it has already failed once at the bridge, so it is a known quantity rather than a guess. A demonstrated agent purchase is worth more to the submission than any new feature.
+3. **Confirm the public builder profile** linked on the submission.
+4. **Do not add scope before Oct 14.** Borrow Kit (BTC collateral only) does not fit the user base; scheduled payments are a good idea that needs the first server-side per-user state in this app, which is a post-submission project. Both are assessed in the session notes and neither is started.
