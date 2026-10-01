@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { goalProblem, progressOf, type SavingsGoal } from './savings';
+import { addGoal, adjustGoal, goalProblem, loadGoals, progressOf, reconcileGoals, type SavingsGoal } from './savings';
 
 const goal = (over: Partial<SavingsGoal> = {}): SavingsGoal => ({
   id: 'g1',
@@ -63,5 +63,72 @@ describe('progressOf', () => {
     const p = progressOf(goal({ saved: 40, due: Date.UTC(2026, 0, 9) }), now);
     expect(p.daysLeft).toBe(0);
     expect(p.perDay).toBe(60);
+  });
+});
+
+describe('reconcileGoals', () => {
+  /** A fresh wallet per test: the goal store is keyed by address */
+  let n = 0;
+  const wallet = () => `0x${(++n).toString(16).padStart(40, '0')}`;
+
+  /** Two targets holding 30 and 70 USDC against the shared vault */
+  const withSaved = (address: string) => {
+    const a = addGoal(address, 'Rent', 100)!;
+    const b = addGoal(address, 'Laptop', 500)!;
+    adjustGoal(address, a.id, 30);
+    adjustGoal(address, b.id, 70);
+    return { a, b };
+  };
+
+  const savedOf = (address: string) =>
+    Object.fromEntries(loadGoals(address).map((g) => [g.name, g.saved]));
+
+  it('leaves the targets alone when the vault holds what they claim', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(address, 100)).toBe(0);
+    expect(savedOf(address)).toEqual({ Rent: 30, Laptop: 70 });
+  });
+
+  it('leaves a surplus alone: earnings grow the vault past the notes', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(address, 140)).toBe(0);
+    expect(savedOf(address)).toEqual({ Rent: 30, Laptop: 70 });
+  });
+
+  it('trims proportionally when money left the vault somewhere else', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(address, 50)).toBe(50);
+    expect(savedOf(address)).toEqual({ Rent: 15, Laptop: 35 });
+  });
+
+  it('empties the targets when the vault is empty', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(address, 0)).toBe(100);
+    expect(savedOf(address)).toEqual({ Rent: 0, Laptop: 0 });
+  });
+
+  it('does nothing without an address, or on a balance it cannot trust', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(undefined, 0)).toBe(0);
+    expect(reconcileGoals(address, Number.NaN)).toBe(0);
+    expect(reconcileGoals(address, -1)).toBe(0);
+    expect(savedOf(address)).toEqual({ Rent: 30, Laptop: 70 });
+  });
+
+  it('ignores rounding dust rather than rewriting every target over it', () => {
+    const address = wallet();
+    withSaved(address);
+    expect(reconcileGoals(address, 99.9999995)).toBe(0);
+  });
+
+  it('has nothing to do when no target holds anything', () => {
+    const address = wallet();
+    addGoal(address, 'Rent', 100);
+    expect(reconcileGoals(address, 0)).toBe(0);
   });
 });

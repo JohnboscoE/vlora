@@ -17,11 +17,6 @@ interface Planned {
  */
 const PLANNED: Planned[] = [
   {
-    name: 'Savings targets',
-    what: 'Put money aside toward a goal and watch it fill.',
-    blockedBy: 'Next up. Earn already holds the money; this adds goals on top of it.',
-  },
-  {
     name: 'Group saving (TeamUp)',
     what: 'Several people contribute to one pot, and half of them must agree before anything leaves it.',
     blockedBy: 'Needs a new contract holding other people’s money, with voting and refunds. That wants an audit, not a deadline.',
@@ -71,7 +66,8 @@ export function ComingSoon() {
           <Clock3 className="size-4 text-brand" /> What&apos;s next
         </h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
-          Sending, swapping, bills, cashing out, bank deposits, Earn, spending charts, statements and the agent wallet work today on{' '}
+          Sending, swapping, bills, cashing out, bank deposits, Earn, savings targets, spending charts, statements and the agent wallet work
+          today on{' '}
           {ACTIVE_CHAIN.name}. These don&apos;t yet, and each line says what it is waiting on.
         </p>
       </div>

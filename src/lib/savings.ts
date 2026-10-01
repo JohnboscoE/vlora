@@ -114,3 +114,33 @@ export function progressOf(goal: SavingsGoal, now = Date.now()): GoalProgress {
   const daysLeft = Math.max(0, Math.ceil((goal.due - now) / 86_400_000));
   return { fraction, remaining, done, perDay: daysLeft > 0 ? remaining / daysLeft : remaining, daysLeft };
 }
+
+/**
+ * Trim the targets to what the vault actually holds.
+ *
+ * A target's balance is a note in this browser against one shared vault position.
+ * Earn withdraws from that same pot, and so does the chat — neither knows about
+ * targets, so after a withdrawal elsewhere the notes claim money that has already
+ * left. The chain is right and the notes are wrong: scale them down to fit.
+ *
+ * Proportionally, because USDC is fungible and nothing records which target a
+ * withdrawal came out of — picking a victim would be a guess dressed up as a fact.
+ * Earnings only ever push the vault above the notes, so a surplus is left alone.
+ *
+ * Returns how much had to come off, or 0 when the notes already fit.
+ */
+export function reconcileGoals(address: string | undefined, vaultBalance: number): number {
+  if (!address || !Number.isFinite(vaultBalance) || vaultBalance < 0) return 0;
+  const goals = loadGoals(address);
+  const total = goals.reduce((sum, g) => sum + g.saved, 0);
+  if (total <= 0) return 0;
+  const excess = Number((total - vaultBalance).toFixed(6));
+  // Under a millionth of a USDC is rounding, not a withdrawal
+  if (excess <= 0.000001) return 0;
+  const ratio = vaultBalance / total;
+  save(
+    address,
+    goals.map((goal) => ({ ...goal, saved: Math.max(0, Number((goal.saved * ratio).toFixed(6))) })),
+  );
+  return excess;
+}
